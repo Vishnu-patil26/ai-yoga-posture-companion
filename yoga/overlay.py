@@ -202,7 +202,7 @@ def draw_hud(frame: np.ndarray, ev: Evaluation | None, sm: PoseStateMachine,
     cv2.putText(frame, f"best alignment:  {st.best_score:.1f}%", (16, y), FONT, 0.42, COL_DIM, 1, cv2.LINE_AA)
 
     cv2.putText(frame, f"{fps:4.1f} fps", (16, h - 14), FONT, 0.46, COL_DIM, 1, cv2.LINE_AA)
-    cv2.putText(frame, "q quit  v voice  r reset  s snapshot  g guide",
+    cv2.putText(frame, "q/Esc or close window to quit   v voice  g guide  r reset  s snapshot",
                 (110, h - 14), FONT, 0.40, COL_DIM, 1, cv2.LINE_AA)
 
     banner = cue_text or hint

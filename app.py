@@ -10,7 +10,8 @@ log.  No video is recorded; frames are used and discarded.
     python app.py --source clip.mp4        # run against a recorded clip
     python app.py --no-voice               # silent, for a quiet room / viva
 
-Keys while running:  q quit   v voice on/off   r reset session   s snapshot
+Quit with q or Esc (video window focused), or by closing the window.
+Other keys:  v voice on/off   g guide panels   r reset session   s snapshot
 """
 
 from __future__ import annotations
@@ -36,6 +37,24 @@ from yoga.state_machine import PoseStateMachine, State
 from yoga.storage import SessionLog
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+
+WINDOW = "AI Yoga Companion"
+WINDOW_CALIBRATE = "AI Yoga Companion - calibration"
+
+
+def window_closed(name: str) -> bool:
+    """True once the user has clicked the window's close button.
+
+    OpenCV's HighGUI has no close callback: clicking the X destroys the window
+    but does not stop the program, and the next `imshow` simply builds a new
+    one - so the app appears unclosable and keeps holding the camera.  Polling
+    the window property is the only way to notice, and it must be guarded
+    because querying a window that is already gone raises on some builds.
+    """
+    try:
+        return cv2.getWindowProperty(name, cv2.WND_PROP_VISIBLE) < 1
+    except cv2.error:
+        return True
 
 #: How long a spoken cue stays on screen before the banner falls back to
 #: describing the current state.
@@ -176,11 +195,15 @@ def run_calibration(args) -> int:
 
             if pose is not None:
                 draw_skeleton(frame, pose, None)
-            cv2.imshow("AI Yoga Companion - calibration", frame)
-            if cv2.waitKey(1) & 0xFF == ord("q"):
+            cv2.imshow(WINDOW_CALIBRATE, frame)
+            if cv2.waitKey(1) & 0xFF in (ord("q"), 27):
+                break
+            if window_closed(WINDOW_CALIBRATE):
                 break
             if t >= countdown + capture_s:
                 break
+    except KeyboardInterrupt:
+        print("\ncalibration cancelled")
     finally:
         cap.release()
         tracker.close()
@@ -248,7 +271,8 @@ def run_live(args) -> int:
     print(f"{asana.sanskrit} ({asana.name}) - hold target {asana.hold_target_s:.0f}s, "
           f"enter at {asana.enter_score:.0f}%")
     print(asana.setup_hint)
-    print("Press q to finish.")
+    print("To finish: press q or Esc with the video window focused, "
+          "or close the window.")
     print("")
 
     try:
@@ -343,9 +367,11 @@ def run_live(args) -> int:
                                              (frame.shape[1], frame.shape[0]))
                 writer.write(frame)
 
-            cv2.imshow("AI Yoga Companion", frame)
+            cv2.imshow(WINDOW, frame)
             key = cv2.waitKey(1) & 0xFF
-            if key == ord("q"):
+            if key in (ord("q"), 27):                 # q or Esc
+                break
+            if window_closed(WINDOW):
                 break
             if key == ord("v"):
                 speaker.enabled = not speaker.enabled
@@ -367,6 +393,10 @@ def run_live(args) -> int:
                 name = os.path.join(snapdir, f"snap_{int(time.time())}.png")
                 cv2.imwrite(name, frame)
                 print("snapshot -> " + name)
+    except KeyboardInterrupt:
+        # Ctrl+C in the terminal is a legitimate way out; fall through to the
+        # finally block so the camera is released and the session is still saved.
+        print("\nstopping")
     finally:
         cap.release()
         if writer is not None:

@@ -83,7 +83,8 @@ macOS Docker cannot reach a webcam — run the trainer natively there, which
 **Requires** Python 3.9–3.12 for a native install (MediaPipe publishes no wheels
 for 3.13+) — or just Docker.
 
-Keys while running: `q` quit · `v` voice · `g` guide panels · `r` reset · `s` snapshot.
+To quit: press `q` or `Esc` with the video window focused, or just close the
+window. Other keys: `v` voice · `g` guide panels · `r` reset · `s` snapshot.
 
 ---
 
