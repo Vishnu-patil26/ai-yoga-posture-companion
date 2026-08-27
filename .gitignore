@@ -1,0 +1,26 @@
+# environments and build output
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.egg-info/
+
+# fetched at setup time, not source (see bootstrap.py / Dockerfile)
+models/*.task
+
+# generated or derived working data
+data/datasets/
+data/sessions.db
+data/snapshots/
+data/demo/
+data/samples/*.mp4
+data/samples/shot_*.png
+
+# per-user calibration
+profiles/*.json
+
+# editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

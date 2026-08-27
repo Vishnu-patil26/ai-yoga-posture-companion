@@ -1,0 +1,14 @@
+# AI Yoga Posture & Wellness Companion
+# Python 3.9-3.12.  MediaPipe publishes no wheels for 3.13+.
+
+mediapipe>=1.0.0
+
+# MediaPipe already depends on opencv-contrib-python, which is a superset of
+# opencv-python and provides the same `cv2` module.  Installing plain
+# opencv-python alongside it makes the two packages fight over the shared cv2
+# directory, and uninstalling either leaves a half-broken `cv2` that still
+# imports but has no attributes.  So depend on the contrib build only.
+opencv-contrib-python>=4.10
+
+numpy>=1.26
+pyttsx3>=2.90        # offline text-to-speech (Windows SAPI5 / macOS NSSpeech / espeak)

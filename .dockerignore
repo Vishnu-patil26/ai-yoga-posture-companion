@@ -1,0 +1,12 @@
+.git
+.venv
+__pycache__
+**/__pycache__
+*.pyc
+data/datasets
+data/sessions.db
+data/snapshots
+data/demo
+data/samples/*.mp4
+models
+profiles/*.json

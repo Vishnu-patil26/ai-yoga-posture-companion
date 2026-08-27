@@ -1,0 +1,57 @@
+# Normal commands, any laptop with Docker:
+#
+#   docker compose run --rm verify     # 66 engine checks  (this is the default)
+#   docker compose run --rm session    # scripted 90s practice + progress report
+#   docker compose run --rm shell      # poke around inside
+#   docker compose run --rm dataset    # download the dataset, fit + validate
+#   docker compose run --rm live       # live trainer  (Linux hosts only)
+
+services:
+  verify:
+    build: .
+    image: ai-yoga-companion
+    command: python tools/selftest.py
+
+  session:
+    build: .
+    image: ai-yoga-companion
+    command: >
+      sh -c "python tools/simulate_session.py --quiet && python tools/report.py"
+    volumes:
+      - ./data:/app/data
+
+  shell:
+    build: .
+    image: ai-yoga-companion
+    command: bash
+    volumes:
+      - ./data:/app/data
+
+  # Reproduces the fitted reference angles and the held-out validation table in
+  # docs/REFERENCES.md.  Downloads ~100 MB the first time; the dataset is kept
+  # in the mounted ./data so it is only fetched once.
+  dataset:
+    build: .
+    image: ai-yoga-companion
+    command: >
+      sh -c "python tools/get_dataset.py &&
+             python tools/fit_reference.py data/datasets/yoga_poses/train/tree &&
+             python tools/validate_dataset.py data/datasets/yoga_poses/test"
+    volumes:
+      - ./data:/app/data
+
+  # Live trainer from inside the container.  Linux hosts only: Docker on
+  # Windows and macOS cannot pass through a webcam or an X display.
+  # Before running:  xhost +local:docker
+  live:
+    build: .
+    image: ai-yoga-companion
+    command: python app.py
+    environment:
+      - DISPLAY=${DISPLAY:-:0}
+    devices:
+      - /dev/video0:/dev/video0
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ./data:/app/data
+      - ./profiles:/app/profiles
