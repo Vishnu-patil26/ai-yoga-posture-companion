@@ -313,6 +313,16 @@ def doctor(fix: bool = True) -> int:
         return 0
 
     fatal = [s for s in remaining if s.fatal]
+    if not fix:
+        # Diagnosis only - nothing was attempted, so do not claim it failed.
+        say(f"  {len(remaining)} thing(s) still to set up:", YELLOW)
+        for step in remaining:
+            say(f"    - {step.name}  {DIM}{step.detail}{RESET}", YELLOW)
+        say("")
+        say("  Run  python bootstrap.py  to fix them.", DIM)
+        say("")
+        return 1
+
     say(f"  {len(remaining)} problem(s) could not be fixed automatically:", RED)
     for step in remaining:
         say(f"    - {step.name}", RED)
