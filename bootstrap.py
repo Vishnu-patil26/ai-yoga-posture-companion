@@ -170,9 +170,13 @@ def repair_packages() -> str:
     run([py, "-m", "pip", "install", "--upgrade", "pip", "-q"])
     req = os.path.join(ROOT, "requirements.txt")
 
-    # A conflicting plain-opencv install is the usual cause of a broken cv2;
-    # clear both out before reinstalling so one build owns the directory.
-    if run([py, "-c", "import cv2; cv2.__version__"]).returncode != 0:
+    # A half-removed OpenCV still imports and then has no attributes, because
+    # the two distributions share the `cv2` directory.  Clear them out before
+    # reinstalling so exactly one build owns it.  A cv2 that is simply absent
+    # needs no such surgery - only say so when it is genuinely broken.
+    importable = run([py, "-c", "import cv2"]).returncode == 0
+    usable = importable and run([py, "-c", "import cv2; cv2.__version__"]).returncode == 0
+    if importable and not usable:
         say("      cv2 imports but is broken - reinstalling OpenCV cleanly", DIM)
         run([py, "-m", "pip", "uninstall", "-y", "-q", "opencv-python",
              "opencv-contrib-python", "opencv-python-headless"])
