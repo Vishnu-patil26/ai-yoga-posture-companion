@@ -113,6 +113,31 @@ def compute_features(pose: Pose) -> dict:
     f["foot_height_ratio"] = (float(s_ankle[1] - d_ankle[1]) / leg_span
                               if leg_span > 1e-3 else float("nan"))
 
+    # Pixel lengths of the body's own segments.  Nothing here is used for
+    # scoring - phrasing.py uses them as "rulers" to turn a tilt or a ratio
+    # into a body-relative distance (see docs there for why).
+    f["standing_leg_px"] = abs(leg_span)
+    f["hip_width_px"] = A.distance(lh, rh)
+    f["shoulder_width_px"] = A.distance(ls, rs)
+
+    # ---- side-agnostic geometry, for asanas other than this one -------------
+    # "Left" and "right" are the wrong handles for a pose library: the same
+    # asana done on the other side, or simply mirrored by the webcam, swaps
+    # them and the reference no longer matches.  Sorting each pair into
+    # bent/straight instead makes every measurement mirror-invariant, which is
+    # what lets one set of checks describe a pose regardless of which side the
+    # practitioner leads with.
+    kl, kr = f["knee_left"], f["knee_right"]
+    el, er = f["elbow_left"], f["elbow_right"]
+    al, ar = f["arm_raise_left"], f["arm_raise_right"]
+    f["knee_bent"], f["knee_straight"] = min(kl, kr), max(kl, kr)
+    f["elbow_bent"], f["elbow_straight"] = min(el, er), max(el, er)
+    f["arm_raise_high"], f["arm_raise_low"] = min(al, ar), max(al, ar)
+    # How wide the feet are planted, in torso lengths - the thing that
+    # separates a lunge from a stand without caring which foot is forward.
+    f["stance_width"] = (A.distance(p[L_ANKLE], p[R_ANKLE]) / f["torso_px"]
+                         if f["torso_px"] > 1e-3 else float("nan"))
+
     # How square-on the practitioner is: shoulder width over torso length.
     # Level-of-the-hips and level-of-the-shoulders are measured in the image
     # plane, so they are only meaningful when the body faces the camera - turn

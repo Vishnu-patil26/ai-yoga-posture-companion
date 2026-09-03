@@ -260,3 +260,75 @@ def get(key: str) -> Asana:
         return LIBRARY[key]
     except KeyError:
         raise SystemExit(f"Unknown asana '{key}'. Available: {', '.join(LIBRARY)}")
+
+
+# ---------------------------------------------------------------------------
+# Fitted asanas.
+#
+# VRIKSHASANA above is hand-tuned: its checks use features that only exist for
+# a one-legged standing balance, and each target was argued for against the
+# data one at a time.  That does not scale to a library.
+#
+# The poses below are fitted automatically by tools/fit_asana.py from a
+# side-agnostic feature vocabulary (bent/straight knee, bent/straight elbow,
+# high/low arm, spine angle, stance width), which is mirror-invariant and so
+# describes an asana without caring which side it is performed on.  Every
+# target is the median of the dataset class and every tolerance is derived
+# from its spread - nothing here is guessed.
+#
+# Loading is best-effort: a missing or unreadable fits file leaves the library
+# with the hand-tuned asana only, rather than preventing the app from starting.
+# ---------------------------------------------------------------------------
+
+import json as _json
+import os as _os
+
+_FITS_PATH = _os.path.join(
+    _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
+    "data", "asana_fits.json")
+
+
+def _asana_from_fit(spec: dict) -> Asana:
+    checks = []
+    for key, c in spec["checks"].items():
+        checks.append(Check(
+            key=key, label=c["label"], target=float(c["target"]),
+            tol=float(c["tol"]), zero_at=float(c["zero_at"]),
+            weight=float(c["weight"]), unit=c.get("unit", "deg"),
+            needs=("torso",),
+            cue=f"Adjust your {c['label'].lower()}",
+        ))
+    return Asana(
+        key=spec["key"], name=spec["name"], sanskrit=spec["sanskrit"],
+        level=int(spec.get("level", 2)), checks=tuple(checks),
+        setup_hint="Stand facing the camera, full body in frame, about 2 m away.",
+        notes=(f"Fitted from {spec.get('n_images', '?')} images of the "
+               f"'{spec.get('source_class')}' class with tools/fit_asana.py."),
+    )
+
+
+def load_fitted(path: str = _FITS_PATH) -> dict[str, Asana]:
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = _json.load(fh)
+    except (OSError, ValueError):
+        return {}
+    out = {}
+    for key, spec in data.items():
+        try:
+            out[key] = _asana_from_fit(spec)
+        except (KeyError, TypeError, ValueError):
+            continue                       # skip a malformed entry, keep the rest
+    return out
+
+
+#: Keys the fitted loader must not register - the hand-tuned Vrikshasana is a
+#: better definition of the same pose (it uses features specific to a one-legged
+#: balance, and accepts both arm forms), so its automatic twin would only be a
+#: confusing second entry for the same asana.
+_SUPERSEDED_BY_HAND_TUNED = {"vrikshasana_fit"}
+
+for _key, _asana in load_fitted().items():
+    if _key in _SUPERSEDED_BY_HAND_TUNED:
+        continue
+    LIBRARY.setdefault(_key, _asana)

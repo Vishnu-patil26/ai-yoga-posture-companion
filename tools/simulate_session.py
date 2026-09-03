@@ -27,6 +27,7 @@ from yoga.reference import ideal_pose as make_tree_pose         # noqa: E402
 from yoga.asanas import VRIKSHASANA                             # noqa: E402
 from yoga.evaluator import compute_features, evaluate           # noqa: E402
 from yoga.feedback import CueEngine                             # noqa: E402
+from yoga.phrasing import spoken_phrase                         # noqa: E402
 from yoga.filters import RollingMean                            # noqa: E402
 from yoga.state_machine import PoseStateMachine, State          # noqa: E402
 from yoga.storage import SessionLog                             # noqa: E402
@@ -63,7 +64,7 @@ def main(argv=None) -> int:
     asana = VRIKSHASANA
     sm = PoseStateMachine(hold_target_s=asana.hold_target_s,
                           enter_score=asana.enter_score, exit_score=asana.exit_score)
-    cues = CueEngine()
+    cues = CueEngine(phrase_fn=spoken_phrase)
     smooth = RollingMean(window=5)
     log = None if args.no_db else SessionLog(asana.key, source="simulated")
 

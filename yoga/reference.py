@@ -138,6 +138,15 @@ STEP_FIGURES = {
     "hold":   dict(foot_ratio=0.80, thigh_open=56.0, arm_tilt=12.0),
     "heart":  dict(foot_ratio=0.80, thigh_open=56.0, hands_at_chest=True),
     "done":   dict(foot_ratio=0.02, thigh_open=3.0, arm_tilt=168.0),
+    # Resting looks the same as standing - both feet down, arms lowered.
+    "rest":   dict(foot_ratio=0.02, thigh_open=3.0, arm_tilt=168.0),
+    # Stages of the practice choreography.
+    "steady": dict(foot_ratio=0.80, thigh_open=56.0, hands_at_chest=True),
+    "eyes":   dict(foot_ratio=0.80, thigh_open=56.0, arm_tilt=12.0),
+    "count":  dict(foot_ratio=0.80, thigh_open=56.0, arm_tilt=12.0),
+    "down1":  dict(foot_ratio=0.80, thigh_open=56.0, hands_at_chest=True),
+    "up2":    dict(foot_ratio=0.80, thigh_open=56.0, arm_tilt=12.0),
+    "down2":  dict(foot_ratio=0.80, thigh_open=56.0, hands_at_chest=True),
 }
 
 #: The two accepted arm forms, cycled on the card so the practitioner can see

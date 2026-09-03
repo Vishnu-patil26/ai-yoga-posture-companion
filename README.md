@@ -8,8 +8,10 @@ correction, times the hold, and keeps a private practice log.
 Final-year project, Department of Computer Engineering, K.C. College of
 Engineering and Management Studies and Research, Thane.
 
-This repository is the **base implementation**: the full pipeline working end to
-end for one asana — **Vrikshasana (Tree Pose)**.
+**Five asanas**, each with reference angles fitted from a public dataset:
+Vrikshasana (Tree), Virabhadrasana (Warrior), Utkatasana (Chair),
+Adho Mukha Svanasana (Downward Dog) and Bhujangasana (Cobra). Tree Pose is
+fully guided, step by step, through a complete practice.
 
 ![The trainer holding a pose](docs/images/ui-02-holding.png)
 
@@ -29,9 +31,13 @@ numbers are stored, on your own machine.
 **Any laptop, one command.** Clone it and run:
 
 ```bash
-python bootstrap.py          # sets up, repairs anything broken, verifies
-python bootstrap.py --run    # start the live trainer
+python bootstrap.py --run
 ```
+
+That one command is the whole thing: it builds the environment if it is
+missing, repairs it if it is broken, downloads the pose model, runs the engine
+self-test, and then starts the trainer. It is safe to run every time - on a
+machine that is already set up it goes straight to the camera.
 
 `bootstrap.py` is a self-healing installer: every requirement is a *check* paired
 with a *repair*, run in a loop until the environment is green. It finds a Python
@@ -48,7 +54,7 @@ python bootstrap.py --check  # diagnose only, change nothing
 <summary>Other commands (each repairs the environment first)</summary>
 
 ```bash
-python bootstrap.py --test        # 66 engine checks, no camera needed
+python bootstrap.py --test        # 359 engine checks, no camera needed
 python bootstrap.py --run         # live trainer
 python bootstrap.py --calibrate   # learn your own tolerances
 python bootstrap.py --demo        # scripted 90s practice through the real pipeline
@@ -67,7 +73,7 @@ On Windows without `make`: `setup.bat`, `run.bat`, `test.bat`.
 No Python at all? Every number in the docs is reproducible from a container:
 
 ```bash
-docker compose run --rm verify    # 66 engine checks
+docker compose run --rm verify    # 359 engine checks
 docker compose run --rm session   # scripted practice + progress report
 docker compose run --rm dataset   # refit the reference, rerun the validation
 ```
@@ -90,18 +96,23 @@ window. Other keys: `v` voice · `g` guide panels · `r` reset · `s` snapshot.
 
 ## What it does
 
-**It talks you into the pose**, then corrects you. Five guided steps, each waiting
-for your body to actually do it before moving on:
+**It talks you through the whole practice**, one stage at a time. Every stage
+waits for your body to actually reach the position *and hold it* before moving
+on — the settle and the count are simply long waits, so nothing can be raced
+past:
 
-> *"Step back until your whole body, head to feet, is in the frame."* → *"Stand tall
-> with your feet together."* → *"Now shift all your weight onto one foot."* → *"Bend
-> the other knee, open it out to the side, and press that foot into your inner
-> thigh."* → *"Bring your palms together at your heart, or reach both arms
-> overhead."* → *"Good. Hold it, and breathe."* → **10 · 5 · 3 · 2 · 1** → *"Well held.
-> Lower your foot slowly, and stand on the other leg."*
+| | stage | waits for |
+|---|---|---|
+| 1–4 | get in frame → stand tall → shift your weight → foot to the thigh | each position, held |
+| 5 | **find your balance** | the pose, held **6 s** |
+| 6 | **hands up** | both arms overhead |
+| 7 | **close your eyes** | balance kept, **3 s** |
+| 8 | **count to ten** | balance kept, **10 s** |
+| 9–11 | **hands down → hands up → hands down** | the arms actually arriving |
+| 12 | **rest** | a counted recovery, then the practice repeats |
 
-Already in the pose? It skips straight through — nobody sits through the script
-needlessly.
+Already in position? A stage whose condition is already met passes straight
+through, so nobody sits through instructions they do not need.
 
 | | |
 |---|---|
@@ -156,6 +167,30 @@ the untouched test split of five asanas scored against Vrikshasana:
 accepted, **0 of 290** images of other asanas. Reproduce with
 `python bootstrap.py --validate`.
 
+### The whole library, on held-out data
+
+Every test image scored against *every* asana; the winner should be the right
+one. Fitted on `train/`, scored on `test/`, which fitting never saw:
+
+| true pose | n | recognised correctly |
+|---|---|---|
+| Utkatasana (chair) | 84 | **100 %** |
+| Adho Mukha (dog) | 90 | **100 %** |
+| Vrikshasana (tree) | 96 | **100 %** |
+| Bhujangasana (cobra) | 116 | 82 % |
+| Virabhadrasana (warrior) | 95 | 81 % |
+| **overall** | **481** | **92 %** |
+
+Reproduce with `tools/fit_asana.py` then `tools/confusion.py`. The two weaker
+rows are honest: that dataset's "warrior" class mixes Warrior I, II and III,
+which are different shapes sharing one label.
+
+Run a different asana with `--asana virabhadrasana` (or `utkatasana`,
+`adho_mukha`, `bhujangasana`). Only Vrikshasana has the guided practice — the
+step-by-step script talks about pressing a foot into an inner thigh, so the
+others run in scoring mode and say so rather than reading out instructions
+that do not apply.
+
 Method, citations and the limitations of that sample:
 **[docs/REFERENCES.md](docs/REFERENCES.md)**.
 
@@ -163,7 +198,7 @@ Method, citations and the limitations of that sample:
 
 ## Verified without a camera
 
-`python bootstrap.py --test` runs **66 checks**, all offline:
+`python bootstrap.py --test` runs **359 checks**, all offline:
 
 * **Geometry** — skeletons built with a known spine lean, hip tilt, thigh opening
   and foot height measure back to within 0.6° and 0.02.

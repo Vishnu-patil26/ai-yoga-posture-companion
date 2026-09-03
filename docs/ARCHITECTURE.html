@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Architecture — AI Yoga Posture &amp; Wellness Companion</title>
+<style>
+  @page { size: A4 portrait; margin: 15mm 14mm 14mm 14mm; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: "Segoe UI", Calibri, Arial, sans-serif;
+    color: #16202b; font-size: 10.5pt; line-height: 1.45;
+  }
+  .sheet { page-break-after: always; }
+  .sheet:last-child { page-break-after: auto; }
+
+  header.title { text-align: center; border-bottom: 2.5px solid #1f4e79; padding-bottom: 10px; margin-bottom: 16px; }
+  header.title .soc  { font-family: "Times New Roman", Georgia, serif; font-size: 11pt; font-weight: 700; }
+  header.title .name { font-family: "Times New Roman", Georgia, serif; font-size: 15.5pt; font-weight: 700; line-height: 1.25; }
+  header.title .dept { font-family: "Times New Roman", Georgia, serif; font-size: 11.5pt; font-weight: 700; }
+  header.title h1 { margin: 10px 0 2px; font-size: 17pt; color: #14375e; letter-spacing: .2px; }
+  header.title .sub { font-size: 10pt; color: #4b6076; }
+
+  h2 { font-size: 13pt; color: #14375e; margin: 0 0 3px; padding-bottom: 4px; border-bottom: 1.5px solid #cbd8e5; }
+  h2 .n { display: inline-block; background: #1f4e79; color: #fff; width: 21px; height: 21px; border-radius: 4px;
+          text-align: center; line-height: 21px; font-size: 11pt; margin-right: 8px; }
+  .lede { color: #46596c; font-size: 9.8pt; margin: 6px 0 10px; }
+
+  figure { margin: 0 0 12px; }
+  figure svg { display: block; width: 100%; height: auto; }
+  figcaption { font-size: 8.8pt; color: #5b6e80; font-style: italic; text-align: center; margin-top: 5px; }
+
+  .note { background: #f1f6fb; border-left: 3px solid #2f6fb3; padding: 8px 12px; margin: 10px 0; font-size: 9.6pt; }
+  .note b { color: #14375e; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 9.3pt; margin: 8px 0 12px; }
+  th { background: #1f4e79; color: #fff; text-align: left; padding: 5px 8px; font-weight: 600; }
+  td { padding: 4px 8px; border-bottom: 1px solid #dfe7ef; vertical-align: top; }
+  tr:nth-child(even) td { background: #f7fafd; }
+  code, .mono { font-family: Consolas, "Courier New", monospace; font-size: 9pt; }
+  td code { color: #0b5c3f; }
+
+  ul { margin: 6px 0 10px; padding-left: 20px; }
+  li { margin-bottom: 4px; }
+  .foot { margin-top: 14px; padding-top: 7px; border-top: 1px solid #dfe7ef;
+          font-size: 8.4pt; color: #7a8a99; display: flex; justify-content: space-between; }
+
+  /* SVG shared type sizes */
+  text { font-family: "Segoe UI", Calibri, Arial, sans-serif; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════ PAGE 1 ══════════════════════════ -->
+<div class="sheet">
+  <header class="title">
+    <div class="soc">Excelssior Education Society's</div>
+    <div class="name">K.C. College of Engineering and Management Studies and Research</div>
+    <div class="dept">Department of Computer Engineering</div>
+    <h1>AI Yoga Posture &amp; Wellness Companion</h1>
+    <div class="sub">System Architecture &mdash; base implementation (Vrikshasana) &middot; Vishnu Patil</div>
+  </header>
+
+  <h2><span class="n">1</span>Runtime pipeline &mdash; the life of one frame</h2>
+  <p class="lede">Everything below runs 28 times a second on one CPU core. Timings are measured
+  medians over 50 frames at 1000&times;667 (Intel&nbsp;i7-13xxx, no GPU).</p>
+
+  <figure>
+  <svg viewBox="0 0 800 560" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="a1" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+        <path d="M0,0 L9,4.5 L0,9 z" fill="#2f6fb3"/>
+      </marker>
+      <marker id="a2" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+        <path d="M0,0 L9,4.5 L0,9 z" fill="#8a9bab"/>
+      </marker>
+    </defs>
+    <g font-size="11">
+
+    <!-- capture -->
+    <rect x="270" y="6" width="260" height="34" rx="5" fill="#e8f1fa" stroke="#2f6fb3" stroke-width="1.4"/>
+    <text x="400" y="21" text-anchor="middle" font-weight="700" fill="#14375e">webcam / video file</text>
+    <text x="400" y="34" text-anchor="middle" font-size="9" fill="#4b6076">app.py &middot; capture, mirror</text>
+    <line x1="400" y1="40" x2="400" y2="60" stroke="#2f6fb3" stroke-width="1.6" marker-end="url(#a1)"/>
+
+    <!-- landmarks -->
+    <rect x="240" y="62" width="320" height="50" rx="5" fill="#dff0e0" stroke="#4a9c52" stroke-width="1.4"/>
+    <text x="400" y="79" text-anchor="middle" font-weight="700" fill="#1e5e28">landmarks.PoseTracker</text>
+    <text x="400" y="92" text-anchor="middle" font-size="9" fill="#33633a">MediaPipe Tasks PoseLandmarker &rarr; 33 landmarks</text>
+    <text x="400" y="105" text-anchor="middle" font-size="9" fill="#33633a">+ filters.LandmarkSmoother (One-Euro)</text>
+    <rect x="566" y="76" width="52" height="20" rx="9" fill="#4a9c52"/>
+    <text x="592" y="90" text-anchor="middle" font-size="9" font-weight="700" fill="#fff">13.9 ms</text>
+    <line x1="400" y1="112" x2="400" y2="132" stroke="#2f6fb3" stroke-width="1.6" marker-end="url(#a1)"/>
+    <text x="408" y="127" font-size="8.5" fill="#5b6e80" font-style="italic">Pose(pts, raw, vis, world)</text>
+
+    <!-- features -->
+    <rect x="200" y="134" width="400" height="66" rx="5" fill="#fdf1dc" stroke="#d9932f" stroke-width="1.4"/>
+    <text x="400" y="151" text-anchor="middle" font-weight="700" fill="#8a5a06">evaluator.compute_features</text>
+    <text x="400" y="165" text-anchor="middle" font-size="9" fill="#7a5210">joint angles &middot; standing leg auto-detected &middot; frontality</text>
+    <text x="400" y="178" text-anchor="middle" font-size="9" fill="#7a5210">per-part visibility &middot; framing (head / torso / feet / distance)</text>
+    <text x="400" y="192" text-anchor="middle" font-size="8.5" fill="#9a7430" font-style="italic">33 landmarks &rarr; ~20 measurements</text>
+    <line x1="400" y1="200" x2="400" y2="220" stroke="#2f6fb3" stroke-width="1.6" marker-end="url(#a1)"/>
+
+    <!-- evaluate -->
+    <rect x="200" y="222" width="400" height="62" rx="5" fill="#fdf1dc" stroke="#d9932f" stroke-width="1.4"/>
+    <text x="400" y="239" text-anchor="middle" font-weight="700" fill="#8a5a06">evaluator.evaluate</text>
+    <text x="400" y="253" text-anchor="middle" font-size="9" fill="#7a5210">score every accepted variant &rarr; best match wins</text>
+    <text x="400" y="266" text-anchor="middle" font-size="9" fill="#7a5210">per check: value, deviation, in-tolerance / ungraded</text>
+    <text x="400" y="279" text-anchor="middle" font-size="8.5" fill="#9a7430" font-style="italic">score = 0.6 &times; weighted mean + 0.4 &times; worst joint</text>
+    <rect x="606" y="196" width="52" height="20" rx="9" fill="#d9932f"/>
+    <text x="632" y="210" text-anchor="middle" font-size="9" font-weight="700" fill="#fff">0.13 ms</text>
+
+    <!-- inputs from the left -->
+    <rect x="18" y="150" width="170" height="30" rx="5" fill="#f3eafc" stroke="#8257b8" stroke-width="1.3"/>
+    <text x="103" y="163" text-anchor="middle" font-size="10" font-weight="700" fill="#4b2c75">asanas.VRIKSHASANA</text>
+    <text x="103" y="175" text-anchor="middle" font-size="8.5" fill="#6a4a94">11 checks &middot; 2 variants</text>
+    <rect x="18" y="188" width="170" height="30" rx="5" fill="#f3eafc" stroke="#8257b8" stroke-width="1.3"/>
+    <text x="103" y="201" text-anchor="middle" font-size="10" font-weight="700" fill="#4b2c75">calibration profile</text>
+    <text x="103" y="213" text-anchor="middle" font-size="8.5" fill="#6a4a94">personal tolerances (optional)</text>
+    <path d="M188 165 L196 165 L196 250 L198 250" fill="none" stroke="#8257b8" stroke-width="1.4" marker-end="url(#a1)"/>
+    <path d="M188 203 L192 203 L192 252 L198 252" fill="none" stroke="#8257b8" stroke-width="1.4"/>
+
+    <line x1="400" y1="284" x2="400" y2="304" stroke="#2f6fb3" stroke-width="1.6" marker-end="url(#a1)"/>
+    <text x="408" y="299" font-size="8.5" fill="#5b6e80" font-style="italic">Evaluation(score, results, variant)</text>
+
+    <!-- fan-out bar -->
+    <line x1="120" y1="308" x2="680" y2="308" stroke="#2f6fb3" stroke-width="1.6"/>
+    <line x1="120" y1="308" x2="120" y2="326" stroke="#2f6fb3" stroke-width="1.6" marker-end="url(#a1)"/>
+    <line x1="400" y1="308" x2="400" y2="326" stroke="#2f6fb3" stroke-width="1.6" marker-end="url(#a1)"/>
+    <line x1="680" y1="308" x2="680" y2="326" stroke="#2f6fb3" stroke-width="1.6" marker-end="url(#a1)"/>
+
+    <!-- state machine -->
+    <rect x="22" y="328" width="196" height="58" rx="5" fill="#e8f1fa" stroke="#2f6fb3" stroke-width="1.4"/>
+    <text x="120" y="345" text-anchor="middle" font-weight="700" fill="#14375e">state_machine</text>
+    <text x="120" y="358" text-anchor="middle" font-size="9" fill="#3f5f7d">SETUP / HOLDING / COMPLETE</text>
+    <text x="120" y="371" text-anchor="middle" font-size="9" fill="#3f5f7d">hold timer, hysteresis, grace</text>
+    <text x="120" y="382" text-anchor="middle" font-size="8.5" fill="#6b8199" font-style="italic">enter 78% &middot; leave 62%</text>
+
+    <!-- coach -->
+    <rect x="300" y="328" width="200" height="58" rx="5" fill="#e8f1fa" stroke="#2f6fb3" stroke-width="1.4"/>
+    <text x="400" y="345" text-anchor="middle" font-weight="700" fill="#14375e">coach</text>
+    <text x="400" y="358" text-anchor="middle" font-size="9" fill="#3f5f7d">5 guided steps into the pose</text>
+    <text x="400" y="371" text-anchor="middle" font-size="9" fill="#3f5f7d">each gated on the measured body</text>
+    <text x="400" y="382" text-anchor="middle" font-size="8.5" fill="#6b8199" font-style="italic">pre-empts correction cues</text>
+
+    <!-- storage -->
+    <rect x="582" y="328" width="196" height="58" rx="5" fill="#fdeaea" stroke="#c0504d" stroke-width="1.4"/>
+    <text x="680" y="345" text-anchor="middle" font-weight="700" fill="#8c2f2c">storage.SessionLog</text>
+    <text x="680" y="358" text-anchor="middle" font-size="9" fill="#a04340">SQLite, sampled at 2 Hz</text>
+    <text x="680" y="371" text-anchor="middle" font-size="9" font-weight="700" fill="#8c2f2c">derived numbers ONLY</text>
+    <text x="680" y="382" text-anchor="middle" font-size="8.5" fill="#b56361" font-style="italic">no frame ever written</text>
+
+    <!-- to cue engine -->
+    <path d="M120 386 L120 404 L340 404 L340 420" fill="none" stroke="#2f6fb3" stroke-width="1.5" marker-end="url(#a1)"/>
+    <path d="M400 386 L400 404" fill="none" stroke="#2f6fb3" stroke-width="1.5"/>
+    <path d="M400 404 L360 404" fill="none" stroke="#2f6fb3" stroke-width="1.5"/>
+
+    <!-- cue engine -->
+    <rect x="230" y="422" width="340" height="58" rx="5" fill="#e8f1fa" stroke="#2f6fb3" stroke-width="1.4"/>
+    <text x="400" y="439" text-anchor="middle" font-weight="700" fill="#14375e">feedback.CueEngine</text>
+    <text x="400" y="452" text-anchor="middle" font-size="9" fill="#3f5f7d">single worst fault &rarr; one spoken correction</text>
+    <text x="400" y="465" text-anchor="middle" font-size="9" fill="#3f5f7d">persist 1 s &middot; cooldown 7 s &middot; soft &rarr; firm</text>
+    <text x="400" y="476" text-anchor="middle" font-size="8.5" fill="#6b8199" font-style="italic">a correct pose is never nagged</text>
+
+    <line x1="400" y1="480" x2="400" y2="498" stroke="#2f6fb3" stroke-width="1.6" marker-end="url(#a1)"/>
+
+    <!-- speaker + overlay -->
+    <rect x="150" y="500" width="230" height="46" rx="5" fill="#dff0e0" stroke="#4a9c52" stroke-width="1.4"/>
+    <text x="265" y="517" text-anchor="middle" font-weight="700" fill="#1e5e28">feedback.Speaker</text>
+    <text x="265" y="530" text-anchor="middle" font-size="9" fill="#33633a">TTS on a worker thread</text>
+    <text x="265" y="541" text-anchor="middle" font-size="8.5" fill="#4d7d54" font-style="italic">queue depth 1 &mdash; drops stale cues</text>
+
+    <rect x="420" y="500" width="230" height="46" rx="5" fill="#dff0e0" stroke="#4a9c52" stroke-width="1.4"/>
+    <text x="535" y="517" text-anchor="middle" font-weight="700" fill="#1e5e28">overlay &rarr; window</text>
+    <text x="535" y="530" text-anchor="middle" font-size="9" fill="#33633a">skeleton, HUD, framing panel, card</text>
+    <text x="535" y="541" text-anchor="middle" font-size="8.5" fill="#4d7d54" font-style="italic">worst limb drawn red &middot; ~2 ms</text>
+    <path d="M680 386 L680 470 L660 470" fill="none" stroke="#8a9bab" stroke-width="1.2" stroke-dasharray="4 3"/>
+    <path d="M120 386 L120 523 L148 523" fill="none" stroke="#8a9bab" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#a2)"/>
+    </g>
+  </svg>
+  <figcaption>Figure 1 — Per-frame runtime pipeline. Solid arrows carry data; dashed arrows carry state.</figcaption>
+  </figure>
+
+  <div class="note">
+    <b>Where the time goes.</b> The neural network costs 13.9 ms; the whole scoring
+    layer this project contributes costs <b>0.13 ms</b> &mdash; roughly 1% of the budget. The
+    pipeline is bounded entirely by MediaPipe, which is what makes a 30 fps camera
+    comfortable on a laptop with no GPU.
+  </div>
+
+  <div class="foot"><span>AI Yoga Posture &amp; Wellness Companion &mdash; Architecture</span><span>Page 1 of 4</span></div>
+</div>
+
+<!-- ══════════════════════════ PAGE 2 ══════════════════════════ -->
+<div class="sheet">
+  <h2><span class="n">2</span>Module structure</h2>
+  <p class="lede">Thirteen modules, ~4,200 lines. The dependency graph is deliberately shallow:
+  no module imports more than three siblings, and the asana definitions import nothing at all.</p>
+
+  <figure>
+  <svg viewBox="0 0 800 300" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="b1" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 z" fill="#8a9bab"/>
+      </marker>
+    </defs>
+    <g font-size="10">
+    <!-- layer 4 -->
+    <rect x="320" y="8" width="160" height="30" rx="5" fill="#1f4e79"/>
+    <text x="400" y="22" text-anchor="middle" font-weight="700" fill="#fff" font-size="11">app.py</text>
+    <text x="400" y="33" text-anchor="middle" font-size="8" fill="#c5dbef">constructs and drives every module below</text>
+
+    <!-- layer 3 -->
+    <rect x="240" y="62" width="120" height="30" rx="4" fill="#e8f1fa" stroke="#2f6fb3"/>
+    <text x="300" y="81" text-anchor="middle" font-weight="600" fill="#14375e">overlay</text>
+    <rect x="440" y="62" width="120" height="30" rx="4" fill="#e8f1fa" stroke="#2f6fb3"/>
+    <text x="500" y="81" text-anchor="middle" font-weight="600" fill="#14375e">feedback</text>
+
+    <!-- layer 2 -->
+    <rect x="240" y="118" width="120" height="30" rx="4" fill="#fdf1dc" stroke="#d9932f"/>
+    <text x="300" y="137" text-anchor="middle" font-weight="600" fill="#8a5a06">evaluator</text>
+    <rect x="460" y="118" width="120" height="30" rx="4" fill="#dff0e0" stroke="#4a9c52"/>
+    <text x="520" y="137" text-anchor="middle" font-weight="600" fill="#1e5e28">reference</text>
+
+    <!-- layer 1 -->
+    <rect x="150" y="174" width="120" height="30" rx="4" fill="#dff0e0" stroke="#4a9c52"/>
+    <text x="210" y="193" text-anchor="middle" font-weight="600" fill="#1e5e28">landmarks</text>
+    <rect x="345" y="174" width="110" height="30" rx="4" fill="#e8f1fa" stroke="#2f6fb3"/>
+    <text x="400" y="193" text-anchor="middle" font-weight="600" fill="#14375e">coach</text>
+    <rect x="520" y="174" width="120" height="30" rx="4" fill="#f3eafc" stroke="#8257b8"/>
+    <text x="580" y="193" text-anchor="middle" font-weight="600" fill="#4b2c75">calibration</text>
+
+    <!-- layer 0 -->
+    <rect x="35" y="230" width="110" height="28" rx="4" fill="#dff0e0" stroke="#4a9c52"/>
+    <text x="90" y="248" text-anchor="middle" font-weight="600" fill="#1e5e28">filters</text>
+    <rect x="175" y="230" width="110" height="28" rx="4" fill="#fdf1dc" stroke="#d9932f"/>
+    <text x="230" y="248" text-anchor="middle" font-weight="600" fill="#8a5a06">angles</text>
+    <rect x="325" y="230" width="110" height="28" rx="4" fill="#f3eafc" stroke="#8257b8"/>
+    <text x="380" y="248" text-anchor="middle" font-weight="600" fill="#4b2c75">asanas</text>
+    <rect x="480" y="230" width="130" height="28" rx="4" fill="#e8f1fa" stroke="#2f6fb3"/>
+    <text x="545" y="248" text-anchor="middle" font-weight="600" fill="#14375e">state_machine</text>
+    <rect x="655" y="230" width="110" height="28" rx="4" fill="#fdeaea" stroke="#c0504d"/>
+    <text x="710" y="248" text-anchor="middle" font-weight="600" fill="#8c2f2c">storage</text>
+
+    <!-- edges: every one is a real import -->
+    <g stroke="#8a9bab" stroke-width="1.25" fill="none" marker-end="url(#b1)">
+      <path d="M380 38 C 360 50, 320 50, 302 58"/>
+      <path d="M420 38 C 440 50, 480 50, 498 58"/>
+      <path d="M300 92 L300 114"/>
+      <path d="M270 92 C 250 104, 225 150, 214 170"/>
+      <path d="M352 77 C 620 74, 590 190, 560 226"/>
+      <path d="M462 92 C 420 102, 372 108, 362 116"/>
+      <path d="M510 92 C 520 150, 552 200, 549 226"/>
+      <path d="M282 148 C 262 158, 232 164, 222 170"/>
+      <path d="M282 148 C 268 180, 240 214, 232 226"/>
+      <path d="M330 148 C 350 180, 372 210, 378 226"/>
+      <path d="M478 148 C 400 176, 300 178, 274 186"/>
+      <path d="M188 204 C 160 214, 118 222, 106 226"/>
+      <path d="M420 204 C 470 212, 512 220, 526 226"/>
+      <path d="M562 204 C 500 214, 440 224, 428 228"/>
+    </g>
+
+    <!-- layer labels -->
+    <g font-size="7.5" fill="#a8b6c2" text-anchor="end">
+      <text x="792" y="27">entry point</text>
+      <text x="792" y="81">presentation</text>
+      <text x="792" y="137">measurement</text>
+      <text x="792" y="193">capture / guidance</text>
+      <text x="795" y="248">leaves</text>
+      <text x="795" y="258">(import nothing)</text>
+    </g>
+    </g>
+  </svg>
+  <figcaption>Figure 2 — Module dependency graph, laid out in layers. Every arrow is a real import extracted from the source; a module sits above everything it depends on.</figcaption>
+  </figure>
+
+  <table>
+    <tr><th style="width:24%">Module</th><th style="width:9%">Lines</th><th>Responsibility</th></tr>
+    <tr><td><code>landmarks.py</code></td><td>143</td><td>Wraps the MediaPipe Tasks API. The rest of the code never sees a mediapipe type.</td></tr>
+    <tr><td><code>filters.py</code></td><td>89</td><td>One-Euro filter: heavy smoothing when still, almost none when moving fast.</td></tr>
+    <tr><td><code>angles.py</code></td><td>62</td><td>Joint geometry in image space, written so asanas read like a teacher's cues.</td></tr>
+    <tr><td><code>asanas.py</code></td><td>262</td><td><b>Pure declaration.</b> Checks, targets, tolerances, variants. No logic, no imports.</td></tr>
+    <tr><td><code>evaluator.py</code></td><td>336</td><td>Measure the body; grade it joint by joint; pick the best-fitting variant.</td></tr>
+    <tr><td><code>state_machine.py</code></td><td>155</td><td>Hold timer with hysteresis and a grace window.</td></tr>
+    <tr><td><code>coach.py</code></td><td>246</td><td>The guided spoken entry into the pose, gated on measured body position.</td></tr>
+    <tr><td><code>feedback.py</code></td><td>180</td><td>Which cue, when to say it, and the text-to-speech worker thread.</td></tr>
+    <tr><td><code>overlay.py</code></td><td>332</td><td>Skeleton, HUD, framing panel, reference card.</td></tr>
+    <tr><td><code>reference.py</code></td><td>150</td><td>The ideal figure, shared by the on-screen card and the self-test.</td></tr>
+    <tr><td><code>calibration.py</code></td><td>92</td><td>Personal tolerances learned from the practitioner's own best attempt.</td></tr>
+    <tr><td><code>storage.py</code></td><td>122</td><td>SQLite practice log. Derived numbers only.</td></tr>
+  </table>
+
+  <div class="note">
+    <b>Why the graph matters.</b> <code>asanas.py</code> holds no logic, so adding a second
+    asana is one declaration and one fitting run &mdash; the engine does not change.
+    And because <code>reference.py</code> feeds both the on-screen card and the test
+    suite, the figure the practitioner is shown is <i>by construction</i> the figure
+    the scorer accepts.
+  </div>
+
+  <div class="foot"><span>AI Yoga Posture &amp; Wellness Companion &mdash; Architecture</span><span>Page 2 of 4</span></div>
+</div>
+
+<!-- ══════════════════════════ PAGE 3 ══════════════════════════ -->
+<div class="sheet">
+  <h2 ><span class="n">3</span>Pose state machine</h2>
+  <figure>
+  <svg viewBox="0 0 800 150" xmlns="http://www.w3.org/2000/svg">
+    <defs><marker id="c1" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#2f6fb3"/></marker></defs>
+    <g font-size="10">
+      <rect x="20" y="52" width="120" height="40" rx="20" fill="#eef2f5" stroke="#8a9bab" stroke-width="1.4"/>
+      <text x="80" y="76" text-anchor="middle" font-weight="700" fill="#5b6e80">WAITING</text>
+      <rect x="220" y="52" width="120" height="40" rx="20" fill="#fdf1dc" stroke="#d9932f" stroke-width="1.6"/>
+      <text x="280" y="76" text-anchor="middle" font-weight="700" fill="#8a5a06">SETUP</text>
+      <rect x="430" y="52" width="130" height="40" rx="20" fill="#dff0e0" stroke="#4a9c52" stroke-width="1.6"/>
+      <text x="495" y="76" text-anchor="middle" font-weight="700" fill="#1e5e28">HOLDING</text>
+      <rect x="650" y="52" width="130" height="40" rx="20" fill="#e8f1fa" stroke="#2f6fb3" stroke-width="1.6"/>
+      <text x="715" y="76" text-anchor="middle" font-weight="700" fill="#14375e">COMPLETE</text>
+
+      <line x1="140" y1="72" x2="216" y2="72" stroke="#2f6fb3" stroke-width="1.5" marker-end="url(#c1)"/>
+      <text x="178" y="66" text-anchor="middle" font-size="8.5" fill="#4b6076">body seen</text>
+
+      <line x1="340" y1="72" x2="426" y2="72" stroke="#2f6fb3" stroke-width="1.5" marker-end="url(#c1)"/>
+      <text x="383" y="60" text-anchor="middle" font-size="8.5" fill="#1e5e28" font-weight="700">&ge; 78%</text>
+      <text x="383" y="70" text-anchor="middle" font-size="8" fill="#4b6076">for 0.6 s</text>
+
+      <line x1="560" y1="72" x2="646" y2="72" stroke="#2f6fb3" stroke-width="1.5" marker-end="url(#c1)"/>
+      <text x="603" y="60" text-anchor="middle" font-size="8.5" fill="#14375e" font-weight="700">held 20 s</text>
+
+      <path d="M495 92 L495 122 L280 122 L280 96" fill="none" stroke="#c0504d" stroke-width="1.5" marker-end="url(#c1)"/>
+      <text x="388" y="134" text-anchor="middle" font-size="8.5" fill="#8c2f2c">&lt; 62% continuously for 1.2 s &mdash; a wobble is ridden out</text>
+
+      <path d="M715 92 L715 138 L300 138 L300 96" fill="none" stroke="#8a9bab" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#c1)"/>
+      <text x="640" y="112" text-anchor="middle" font-size="8.5" fill="#5b6e80">released</text>
+
+      <path d="M240 52 L200 28 L80 28 L80 48" fill="none" stroke="#8a9bab" stroke-width="1.3" marker-end="url(#c1)"/>
+      <text x="150" y="22" text-anchor="middle" font-size="8.5" fill="#5b6e80">body lost</text>
+    </g>
+  </svg>
+  <figcaption>Figure 3 — Asymmetric thresholds: 78% to enter, 62% to leave, plus a 1.2 s grace window.</figcaption>
+  </figure>
+
+  <h2><span class="n">4</span>Offline pipeline &mdash; where the reference angles come from</h2>
+  <p class="lede">This runs once, not per frame. It is what makes the numbers in
+  <code>asanas.py</code> defensible rather than guessed.</p>
+
+  <figure>
+  <svg viewBox="0 0 800 250" xmlns="http://www.w3.org/2000/svg">
+    <defs><marker id="d1" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#2f6fb3"/></marker></defs>
+    <g font-size="10">
+      <rect x="250" y="6" width="300" height="42" rx="5" fill="#f3eafc" stroke="#8257b8" stroke-width="1.4"/>
+      <text x="400" y="23" text-anchor="middle" font-weight="700" fill="#4b2c75">TensorFlow / Moroney yoga dataset</text>
+      <text x="400" y="36" text-anchor="middle" font-size="9" fill="#6a4a94">5 classes &middot; 1,442 images &middot; Apache-2.0 &middot; tools/get_dataset.py</text>
+      <text x="400" y="45" text-anchor="middle" font-size="8" fill="#8a6ab0" font-style="italic">not redistributed &mdash; fetched at setup</text>
+
+      <path d="M340 48 L250 74" fill="none" stroke="#2f6fb3" stroke-width="1.5" marker-end="url(#d1)"/>
+      <path d="M460 48 L560 74" fill="none" stroke="#2f6fb3" stroke-width="1.5" marker-end="url(#d1)"/>
+      <text x="240" y="68" text-anchor="end" font-size="8.5" font-weight="700" fill="#1e5e28">train/tree &mdash; 200</text>
+      <text x="572" y="68" font-size="8.5" font-weight="700" fill="#14375e">test/* &mdash; 442</text>
+
+      <rect x="60" y="78" width="300" height="64" rx="5" fill="#dff0e0" stroke="#4a9c52" stroke-width="1.4"/>
+      <text x="210" y="96" text-anchor="middle" font-weight="700" fill="#1e5e28">tools/fit_reference.py</text>
+      <text x="210" y="110" text-anchor="middle" font-size="9" fill="#33633a">BlazePose over every image &rarr; 195 usable</text>
+      <text x="210" y="123" text-anchor="middle" font-size="9" fill="#33633a">target = median &middot; tol = 1.5 &times; (1.4826 &times; MAD)</text>
+      <text x="210" y="136" text-anchor="middle" font-size="8.5" fill="#4d7d54" font-style="italic">robust to mislabels and side views</text>
+
+      <rect x="440" y="78" width="300" height="64" rx="5" fill="#e8f1fa" stroke="#2f6fb3" stroke-width="1.4"/>
+      <text x="590" y="96" text-anchor="middle" font-weight="700" fill="#14375e">tools/validate_dataset.py</text>
+      <text x="590" y="110" text-anchor="middle" font-size="9" fill="#3f5f7d">scores all 5 classes against the reference</text>
+      <text x="590" y="123" text-anchor="middle" font-size="9" fill="#3f5f7d">4 non-tree classes act as the negative set</text>
+      <text x="590" y="136" text-anchor="middle" font-size="8.5" fill="#6b8199" font-style="italic">never seen during fitting</text>
+
+      <line x1="210" y1="142" x2="210" y2="166" stroke="#2f6fb3" stroke-width="1.5" marker-end="url(#d1)"/>
+      <line x1="590" y1="142" x2="590" y2="166" stroke="#2f6fb3" stroke-width="1.5" marker-end="url(#d1)"/>
+
+      <rect x="60" y="168" width="300" height="52" rx="5" fill="#fdf1dc" stroke="#d9932f" stroke-width="1.4"/>
+      <text x="210" y="186" text-anchor="middle" font-weight="700" fill="#8a5a06">yoga/asanas.py</text>
+      <text x="210" y="199" text-anchor="middle" font-size="9" fill="#7a5210">fitted targets, each with a provenance comment</text>
+      <text x="210" y="212" text-anchor="middle" font-size="8.5" fill="#9a7430" font-style="italic">hips 10&deg; &middot; folded knee 30&deg; &middot; foot 0.80</text>
+
+      <rect x="440" y="168" width="300" height="52" rx="5" fill="#fdf1dc" stroke="#d9932f" stroke-width="1.4"/>
+      <text x="590" y="186" text-anchor="middle" font-weight="700" fill="#8a5a06">docs/REFERENCES.md</text>
+      <text x="590" y="200" text-anchor="middle" font-size="9.5" font-weight="700" fill="#1e5e28">P 1.000 &middot; R 0.937 &middot; F1 0.967 &middot; AUC 1.000</text>
+      <text x="590" y="212" text-anchor="middle" font-size="8.5" fill="#9a7430" font-style="italic">89/95 tree accepted &middot; 0/290 others</text>
+    </g>
+  </svg>
+  <figcaption>Figure 4 — The reference is fitted on the train split only; the test split is never seen during fitting.</figcaption>
+  </figure>
+
+  <div class="note">
+    <b>Why fit at all?</b> No standard table of ideal joint angles per asana exists in
+    the literature &mdash; the papers that do angle-based correction each derive their own
+    from data and mostly never publish the numbers. Three fitted values contradicted
+    the obvious guess: the hips sit <b>10&deg; off level</b>, not 0&deg;; the folded knee closes to
+    <b>30&deg;</b>, not 45&deg;; the foot sits at <b>0.80</b> of the standing leg, not 0.70.
+  </div>
+
+  <div class="foot"><span>AI Yoga Posture &amp; Wellness Companion &mdash; Architecture</span><span>Page 3 of 4</span></div>
+</div>
+
+<!-- PAGE 4 -->
+<div class="sheet">
+  <h2><span class="n">5</span>Verification and delivery</h2>
+
+  <table>
+    <tr><th style="width:32%">Path</th><th>What it proves</th></tr>
+    <tr><td><code>tools/selftest.py</code></td><td><b>66 assertions</b> on synthetic skeletons of known geometry &mdash; no camera, no dataset. Angles recover to within 0.6&deg;; each wrong pose names the right fault; the hold timer rides out a 0.7 s wobble but ends on a 2 s loss.</td></tr>
+    <tr><td><code>tools/simulate_session.py</code></td><td>A scripted 90-second practice driven through the <i>real</i> evaluator, state machine, cue engine and logger. Asserts two holds complete.</td></tr>
+    <tr><td><code>tools/analyse.py</code></td><td>Any clip or photo &rarr; per-frame CSV of every joint. The harness for instructor-labelled ground truth (Stage 5).</td></tr>
+    <tr><td><code>bootstrap.py</code></td><td>Self-healing setup: every requirement is a <i>check</i> paired with a <i>repair</i>, looped until green. Runs the self-test as its final gate.</td></tr>
+    <tr><td><code>Dockerfile</code></td><td>Runs the self-test <b>during the image build</b> &mdash; a green image is a green engine.</td></tr>
+  </table>
+
+  <div class="note">
+    <b>Privacy, as built.</b> No frame is ever written to disk; frames are decoded,
+    measured and discarded. The practice log holds joint angles, deviations, scores,
+    hold durations and cue text &mdash; nothing else &mdash; in a local SQLite file. Every stage
+    runs on the machine; there is no network call at run time.
+  </div>
+
+  <div class="note" style="background:#fdf6ec;border-left-color:#d9932f">
+    <b>Scope.</b> This is the asana-trainer track, complete, for one asana. The
+    desk-posture and contactless-vitals tracks in the methodology are not built yet.
+    The validation above proves the system identifies Vrikshasana against other
+    asanas; it does not yet prove it grades a <i>good</i> Vrikshasana against a poor one
+    &mdash; that needs instructor-labelled footage, for which the harness already exists.
+  </div>
+
+  <div class="foot"><span>AI Yoga Posture &amp; Wellness Companion &mdash; Architecture</span><span>Page 4 of 4</span></div>
+</div>
+
+</body>
+</html>

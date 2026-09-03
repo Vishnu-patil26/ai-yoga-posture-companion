@@ -11,6 +11,7 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
+from . import phrasing
 from .evaluator import FRAME_FILL_MAX, FRAME_FILL_MIN, Evaluation
 from .landmarks import (
     CONNECTIONS, L_ANKLE, L_ELBOW, L_HIP, L_KNEE, L_SHOULDER, L_WRIST,
@@ -41,8 +42,29 @@ def _score_colour(score: float) -> tuple[int, int, int]:
     return COL_BAD
 
 
-def _segments_for(key: str, pose: Pose, feats: dict) -> list[tuple[np.ndarray, np.ndarray]]:
-    """Which bones a failing check refers to, so the right limb turns red."""
+#: Every anatomical segment the app grades, keyed by a stable id rather than
+#: by landmark index - a check like "foot_height_ratio" and "folded_knee" both
+#: touch the folded shin, and the id is what lets their two verdicts be
+#: combined into one colour for that one bone.
+_CHECK_SEGMENTS = {
+    "spine_tilt": ("spine",),
+    "hip_level": ("hip_line",),
+    "shoulder_level": ("shoulder_line",),
+    "standing_knee": ("standing_thigh", "standing_shin"),
+    "folded_knee": ("folded_thigh", "folded_shin"),
+    "folded_thigh_open": ("folded_thigh",),
+    "foot_height_ratio": ("folded_shin",),
+    "arm_raise_left": ("left_upper_arm", "left_forearm"),
+    "arm_raise_right": ("right_upper_arm", "right_forearm"),
+    "wrist_to_chest_left": ("left_forearm",),
+    "wrist_to_chest_right": ("right_forearm",),
+}
+
+_STATUS_RANK = {"ok": 0, "ungraded": 1, "fail": 2}
+
+
+def _segment_points(pose: Pose, feats: dict) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+    """Pixel endpoints of every segment named in `_CHECK_SEGMENTS`."""
     p = pose.pts
     standing = feats.get("standing_side", "left")
     folded = feats.get("folded_side", "right")
@@ -52,21 +74,59 @@ def _segments_for(key: str, pose: Pose, feats: dict) -> list[tuple[np.ndarray, n
                               else (R_HIP, R_KNEE, R_ANKLE))
     mid_sh = (p[L_SHOULDER] + p[R_SHOULDER]) * 0.5
     mid_hip = (p[L_HIP] + p[R_HIP]) * 0.5
-
-    table = {
-        "spine_tilt": [(mid_hip, mid_sh)],
-        "hip_level": [(p[L_HIP], p[R_HIP])],
-        "shoulder_level": [(p[L_SHOULDER], p[R_SHOULDER])],
-        "standing_knee": [(p[s_hip], p[s_knee]), (p[s_knee], p[s_ankle])],
-        "folded_knee": [(p[d_hip], p[d_knee]), (p[d_knee], p[d_ankle])],
-        "folded_thigh_open": [(p[d_hip], p[d_knee])],
-        "foot_height_ratio": [(p[d_knee], p[d_ankle])],
-        "arm_raise_left": [(p[L_SHOULDER], p[L_ELBOW]), (p[L_ELBOW], p[L_WRIST])],
-        "arm_raise_right": [(p[R_SHOULDER], p[R_ELBOW]), (p[R_ELBOW], p[R_WRIST])],
-        "elbow_left": [(p[L_SHOULDER], p[L_ELBOW]), (p[L_ELBOW], p[L_WRIST])],
-        "elbow_right": [(p[R_SHOULDER], p[R_ELBOW]), (p[R_ELBOW], p[R_WRIST])],
+    return {
+        "spine": (mid_hip, mid_sh),
+        "hip_line": (p[L_HIP], p[R_HIP]),
+        "shoulder_line": (p[L_SHOULDER], p[R_SHOULDER]),
+        "standing_thigh": (p[s_hip], p[s_knee]),
+        "standing_shin": (p[s_knee], p[s_ankle]),
+        "folded_thigh": (p[d_hip], p[d_knee]),
+        "folded_shin": (p[d_knee], p[d_ankle]),
+        "left_upper_arm": (p[L_SHOULDER], p[L_ELBOW]),
+        "left_forearm": (p[L_ELBOW], p[L_WRIST]),
+        "right_upper_arm": (p[R_SHOULDER], p[R_ELBOW]),
+        "right_forearm": (p[R_ELBOW], p[R_WRIST]),
     }
-    return table.get(key, [])
+
+
+def _segment_status(ev: Evaluation) -> dict[str, str]:
+    """Worst verdict touching each segment: "ok", "fail", or "ungraded".
+
+    A segment can be named by more than one check (the folded shin is graded
+    by both `folded_knee` and `foot_height_ratio`); when their verdicts
+    disagree, the segment is drawn as whichever is worse - a bone is only
+    shown correct when *everything* measured on it is correct.
+    """
+    status: dict[str, str] = {}
+    for res in ev.results:
+        if res.check.weight <= 0.0:            # a dormant variant placeholder
+            continue
+        state = "fail" if res.ok is False else ("ungraded" if res.ok is None else "ok")
+        for seg in _CHECK_SEGMENTS.get(res.check.key, ()):
+            if seg not in status or _STATUS_RANK[state] > _STATUS_RANK[status[seg]]:
+                status[seg] = state
+    return status
+
+
+def _dashed_line(frame: np.ndarray, a, b, colour, thickness: int = 5,
+                 dash: float = 11.0, gap: float = 8.0) -> None:
+    """A dashed bone reads as 'unknown' at a glance, not just a duller colour -
+    useful for a practitioner who has not registered what the solid colours
+    mean yet, and for anyone colour-blind to red/green."""
+    a = np.asarray(a, dtype=float)
+    b = np.asarray(b, dtype=float)
+    length = float(np.linalg.norm(b - a))
+    if length < 1e-3:
+        return
+    direction = (b - a) / length
+    pos, draw = 0.0, True
+    while pos < length:
+        end = min(pos + (dash if draw else gap), length)
+        if draw:
+            p1 = tuple((a + direction * pos).astype(int))
+            p2 = tuple((a + direction * end).astype(int))
+            cv2.line(frame, p1, p2, colour, thickness, cv2.LINE_AA)
+        pos, draw = end, not draw
 
 
 def draw_skeleton(frame: np.ndarray, pose: Pose, ev: Evaluation | None,
@@ -90,11 +150,21 @@ def draw_skeleton(frame: np.ndarray, pose: Pose, ev: Evaluation | None,
     if ev is None:
         return
 
-    # The single worst fault is drawn red; the rest of the faults amber.
-    for rank, res in enumerate(ev.failures[:3]):
-        colour = COL_BAD if rank == 0 else COL_WARN
-        for a, b in _segments_for(res.check.key, pose, ev.features):
-            cv2.line(frame, tuple(a.astype(int)), tuple(b.astype(int)), colour, 5, cv2.LINE_AA)
+    # Every graded bone is coloured by its own verdict: green when correct,
+    # red when wrong, dashed amber when it could not be judged at all.  This
+    # is the whole graded structure at a glance, not just the worst fault.
+    points = _segment_points(pose, ev.features)
+    status = _segment_status(ev)
+    for seg_id, state in status.items():
+        if seg_id not in points:
+            continue
+        a, b = points[seg_id]
+        if state == "ok":
+            cv2.line(frame, tuple(a.astype(int)), tuple(b.astype(int)), COL_OK, 5, cv2.LINE_AA)
+        elif state == "fail":
+            cv2.line(frame, tuple(a.astype(int)), tuple(b.astype(int)), COL_BAD, 6, cv2.LINE_AA)
+        else:                                        # ungraded - "incomplete"
+            _dashed_line(frame, a, b, COL_WARN, thickness=5)
 
 
 def _panel(frame: np.ndarray, x: int, y: int, w: int, h: int, alpha: float = 0.72) -> None:
@@ -127,8 +197,13 @@ def _wrap(text: str, width: int) -> list[str]:
 
 def draw_hud(frame: np.ndarray, ev: Evaluation | None, sm: PoseStateMachine,
              cue_text: str, fps: float, hint: str = "",
-             right_margin: int = 0) -> None:
-    """`right_margin` keeps the bottom banner clear of the reference card."""
+             right_margin: int = 0, metric: bool = False) -> None:
+    """`right_margin` keeps the bottom banner clear of the reference card.
+
+    `metric` shows the old raw degrees/ratio numbers instead of body-relative
+    words - kept for anyone checking the engine's numbers directly, but the
+    practitioner-facing default is words, never a measurement scale.
+    """
     h, w = frame.shape[:2]
     asana = ev.asana if ev else None
 
@@ -163,7 +238,8 @@ def draw_hud(frame: np.ndarray, ev: Evaluation | None, sm: PoseStateMachine,
 
     if ev:
         cv2.putText(frame, "JOINT", (16, y), FONT, 0.42, COL_DIM, 1, cv2.LINE_AA)
-        cv2.putText(frame, "MEAS (dev)", (188, y), FONT, 0.42, COL_DIM, 1, cv2.LINE_AA)
+        cv2.putText(frame, "MEAS (dev)" if metric else "HOW FAR OFF",
+                    (188, y), FONT, 0.42, COL_DIM, 1, cv2.LINE_AA)
         y += 8
         cv2.line(frame, (12, y), (PANEL_W - 12, y), (70, 70, 70), 1)
         y += 18
@@ -171,13 +247,14 @@ def draw_hud(frame: np.ndarray, ev: Evaluation | None, sm: PoseStateMachine,
             if res.check.weight <= 0.0:
                 continue
             if res.ok is None:
-                mark, col = "-", COL_DIM
+                mark, col = "?", COL_WARN            # matches the dashed-amber bone
             elif res.ok:
                 mark, col = "OK", COL_OK
             else:
                 mark, col = "X", COL_BAD
+            words = res.display() if metric else phrasing.short_words(res, ev.features)
             cv2.putText(frame, res.label[:22], (16, y), FONT, 0.42, col, 1, cv2.LINE_AA)
-            cv2.putText(frame, res.display(), (188, y), FONT, 0.42, col, 1, cv2.LINE_AA)
+            cv2.putText(frame, words[:20], (188, y), FONT, 0.42, col, 1, cv2.LINE_AA)
             cv2.putText(frame, mark, (PANEL_W - 34, y), FONT, 0.42, col, 1, cv2.LINE_AA)
             y += 19
         y += 6
@@ -201,8 +278,13 @@ def draw_hud(frame: np.ndarray, ev: Evaluation | None, sm: PoseStateMachine,
     y += 17
     cv2.putText(frame, f"best alignment:  {st.best_score:.1f}%", (16, y), FONT, 0.42, COL_DIM, 1, cv2.LINE_AA)
 
+    if ev:
+        cv2.putText(frame, "green = correct", (16, h - 68), FONT, 0.38, COL_OK, 1, cv2.LINE_AA)
+        cv2.putText(frame, "red = fix this", (16, h - 52), FONT, 0.38, COL_BAD, 1, cv2.LINE_AA)
+        cv2.putText(frame, "dashed = can't see", (16, h - 36), FONT, 0.38, COL_WARN, 1, cv2.LINE_AA)
+
     cv2.putText(frame, f"{fps:4.1f} fps", (16, h - 14), FONT, 0.46, COL_DIM, 1, cv2.LINE_AA)
-    cv2.putText(frame, "q/Esc or close window to quit   v voice  g guide  r reset  s snapshot",
+    cv2.putText(frame, "q/Esc to quit   v voice  g guide  m metric  r reset  s snapshot",
                 (110, h - 14), FONT, 0.40, COL_DIM, 1, cv2.LINE_AA)
 
     banner = cue_text or hint
@@ -249,7 +331,9 @@ def _draw_figure(frame: np.ndarray, pose: Pose, x: int, y: int, w: int, h: int,
 
 
 def draw_reference_card(frame: np.ndarray, pose: Pose, step_no: int, step_total: int,
-                        title: str, instruction: str, done: bool = False) -> None:
+                        title: str, instruction: str, done: bool = False,
+                        confirming: bool = False, confirm_fraction: float = 0.0,
+                        step_seconds: float = 0.0) -> None:
     """Bottom-right card: the shape to make, and the instruction, right now.
 
     A practitioner cannot read a joint-angle table while balancing on one leg
@@ -272,12 +356,96 @@ def draw_reference_card(frame: np.ndarray, pose: Pose, step_no: int, step_total:
     _draw_figure(frame, pose, x + 20, y + 40, CARD_W - 40, 170,
                  COL_OK if done else COL_CARD_BONE)
 
-    cv2.putText(frame, title[:24], (x + 14, y + 232), FONT, 0.56,
+    cv2.putText(frame, title[:24], (x + 14, y + 226), FONT, 0.56,
                 COL_OK if done else COL_TEXT, 2, cv2.LINE_AA)
-    ty = y + 254
-    for line in _wrap(instruction, 30)[:3]:
+    ty = y + 248
+    for line in _wrap(instruction, 30)[:2]:
         cv2.putText(frame, line, (x + 14, ty), FONT, 0.40, COL_DIM, 1, cv2.LINE_AA)
-        ty += 16
+        ty += 15
+
+    # Confirmation timer: while the position is right, a bar fills and only
+    # when it is full does the next step begin.  Without it the practitioner
+    # cannot tell whether the app has noticed them get it right, and the step
+    # appears to change at random.
+    by = y + CARD_H - 30
+    if confirming:
+        cv2.putText(frame, "holding position...", (x + 14, by - 8), FONT, 0.40,
+                    COL_OK, 1, cv2.LINE_AA)
+        _bar(frame, x + 14, by, CARD_W - 28, 9, confirm_fraction, COL_OK)
+    elif step_seconds > 0.0:
+        cv2.putText(frame, f"on this step: {step_seconds:4.1f}s", (x + 14, by - 8),
+                    FONT, 0.40, COL_DIM, 1, cv2.LINE_AA)
+        _bar(frame, x + 14, by, CARD_W - 28, 9, 0.0, COL_DIM)
+
+
+def draw_step_panel(frame: np.ndarray, journey, current: int) -> None:
+    """Right-hand strip: every stage of the practice, and which one you are in.
+
+    A single highlighted card tells you what to do *now* but never how much is
+    left.  Showing the whole list with a position in it answers "which step,
+    and how many" without the practitioner having to ask.
+    """
+    h, w = frame.shape[:2]
+    total = len(journey)
+    row_h = 19
+    ph = 30 + row_h * total
+    x, y = w - CARD_W - 16, 44 + 168 + 10
+    _panel(frame, x, y, CARD_W, ph, alpha=0.80)
+    cv2.rectangle(frame, (x, y), (x + CARD_W, y + ph), (90, 84, 78), 1)
+
+    cv2.putText(frame, f"STEP {min(current + 1, total)} OF {total}", (x + 14, y + 20),
+                FONT, 0.44, COL_TEXT, 1, cv2.LINE_AA)
+    cv2.line(frame, (x + 12, y + 27), (x + CARD_W - 12, y + 27), (80, 76, 70), 1)
+
+    ry = y + 44
+    for i, step in enumerate(journey):
+        if i < current:
+            mark, col = "OK", COL_OK              # already done this attempt
+        elif i == current:
+            mark, col = ">", COL_WARN             # where you are now
+        else:
+            mark, col = "", COL_DIM               # still to come
+        if i == current:
+            cv2.rectangle(frame, (x + 8, ry - 12), (x + CARD_W - 8, ry + 5),
+                          (58, 52, 46), -1)
+        cv2.putText(frame, mark, (x + 14, ry), FONT, 0.38, col, 1, cv2.LINE_AA)
+        cv2.putText(frame, f"{i + 1}. {step.title}"[:24], (x + 38, ry),
+                    FONT, 0.38, col, 1, cv2.LINE_AA)
+        ry += row_h
+
+
+def draw_rest_panel(frame: np.ndarray, remaining: float, target: float) -> None:
+    """Bottom-right, replacing the reference card during the timed rest
+    between one completed hold and the next attempt.
+
+    A spoken countdown alone is easy to miss over a breath or a shuffled
+    step; a large, continuously-visible number is the timer a practitioner
+    can actually check without breaking their attention.
+    """
+    h, w = frame.shape[:2]
+    x, y = w - CARD_W - 16, h - CARD_H - 16
+    _panel(frame, x, y, CARD_W, CARD_H, alpha=0.82)
+    cv2.rectangle(frame, (x, y), (x + CARD_W, y + CARD_H), COL_WARN, 1)
+
+    cv2.putText(frame, "REST", (x + 14, y + 24), FONT, 0.46, COL_DIM, 1, cv2.LINE_AA)
+    cv2.putText(frame, "next attempt in", (x + CARD_W - 120, y + 24), FONT, 0.38,
+                COL_DIM, 1, cv2.LINE_AA)
+    cv2.line(frame, (x + 12, y + 32), (x + CARD_W - 12, y + 32), (80, 76, 70), 1)
+
+    secs = max(0, int(remaining + 0.999))
+    text = str(secs)
+    scale = 2.7
+    (tw, th), _ = cv2.getTextSize(text, FONT, scale, 5)
+    cv2.putText(frame, text, (x + (CARD_W - tw) // 2, y + 60 + th), FONT, scale,
+                COL_WARN, 5, cv2.LINE_AA)
+
+    frac = 1.0 - max(0.0, min(1.0, remaining / max(1e-6, target)))
+    _bar(frame, x + 16, y + 210, CARD_W - 32, 10, frac, COL_WARN)
+
+    cv2.putText(frame, "breathe, and shake out the leg", (x + 16, y + 246),
+                FONT, 0.40, COL_DIM, 1, cv2.LINE_AA)
+    cv2.putText(frame, "jump back in early any time", (x + 16, y + 266),
+                FONT, 0.36, COL_DIM, 1, cv2.LINE_AA)
 
 
 FRAMING_ROWS = (("head", "Head in shot"), ("torso", "Body in shot"),
@@ -330,3 +498,74 @@ def draw_framing_panel(frame: np.ndarray, framing: dict | None) -> None:
     for frac in (FRAME_FILL_MIN, FRAME_FILL_MAX):
         mx = bx + int(bw * frac)
         cv2.line(frame, (mx, by - 3), (mx, by + 12), (235, 235, 235), 1)
+
+
+# =============================================================================
+# Demo walkthrough: what the whole practice looks like, before you start.
+# =============================================================================
+
+def draw_intro_frame(frame: np.ndarray, asana, journey, index: int,
+                     pose: Pose | None, elapsed: float, total_s: float) -> None:
+    """One frame of the pre-session walkthrough.
+
+    Someone standing in front of a camera for the first time has no idea what
+    is about to be asked of them.  Flicking through the whole sequence once,
+    with the shape for each stage, means the live session starts with the
+    practitioner already knowing where it is going - and it doubles as the
+    thing to show an audience who will never install this.
+    """
+    h, w = frame.shape[:2]
+    frame[:] = (30, 26, 22)
+    step = journey[index]
+    total = len(journey)
+
+    # Header
+    cv2.putText(frame, "AI YOGA COMPANION", (44, 52), FONT, 0.70, COL_TEXT, 2, cv2.LINE_AA)
+    cv2.putText(frame, f"{asana.sanskrit} - {asana.name}", (44, 78), FONT, 0.5,
+                COL_DIM, 1, cv2.LINE_AA)
+    tag = "WALKTHROUGH"
+    (tw, _), _ = cv2.getTextSize(tag, FONT, 0.46, 1)
+    cv2.putText(frame, tag, (w - 44 - tw, 52), FONT, 0.46, COL_WARN, 1, cv2.LINE_AA)
+    cv2.line(frame, (44, 96), (w - 44, 96), (72, 68, 62), 1)
+
+    # The whole practice as a row of numbered chips, so the shape of the
+    # session is visible from the very first slide.
+    chip_w, chip_h, gap = 160, 34, 8
+    total_w = total * chip_w + (total - 1) * gap
+    cx = (w - total_w) // 2
+    for i, other in enumerate(journey):
+        x0 = cx + i * (chip_w + gap)
+        if i < index:
+            border, text_col = COL_OK, COL_OK
+        elif i == index:
+            border, text_col = COL_WARN, COL_TEXT
+            cv2.rectangle(frame, (x0, 112), (x0 + chip_w, 112 + chip_h), (54, 48, 42), -1)
+        else:
+            border, text_col = (78, 74, 68), (128, 122, 116)
+        cv2.rectangle(frame, (x0, 112), (x0 + chip_w, 112 + chip_h), border, 1)
+        cv2.putText(frame, f"{i + 1}", (x0 + 9, 134), FONT, 0.44, border, 1, cv2.LINE_AA)
+        cv2.putText(frame, other.title[:18], (x0 + 26, 134), FONT, 0.36,
+                    text_col, 1, cv2.LINE_AA)
+
+    # Figure on the left, instruction on the right.
+    if pose is not None:
+        _draw_figure(frame, pose, 96, 176, 300, h - 300, COL_CARD_BONE)
+
+    tx = 470
+    cv2.putText(frame, f"STEP {index + 1} OF {total}", (tx, 214), FONT, 0.5,
+                COL_WARN, 1, cv2.LINE_AA)
+    cv2.putText(frame, step.title[:26], (tx, 262), FONT, 1.05, COL_TEXT, 2, cv2.LINE_AA)
+    ty = 312
+    for line in _wrap(step.say, 40)[:3]:
+        cv2.putText(frame, line, (tx, ty), FONT, 0.54, COL_DIM, 1, cv2.LINE_AA)
+        ty += 32
+
+    if index + 1 < total:
+        cv2.putText(frame, f"next:  {journey[index + 1].title}", (tx, ty + 26),
+                    FONT, 0.44, (128, 122, 116), 1, cv2.LINE_AA)
+
+    # Progress through the whole walkthrough, not just this slide.
+    overall = (index + min(1.0, elapsed / max(1e-6, total_s))) / total
+    _bar(frame, 44, h - 84, w - 88, 6, overall, COL_WARN)
+    cv2.putText(frame, "press any key to skip and start", (44, h - 50),
+                FONT, 0.46, COL_DIM, 1, cv2.LINE_AA)
