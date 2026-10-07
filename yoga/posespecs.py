@@ -7,7 +7,7 @@ adds the part a yoga teacher supplies, per pose:
 * ``FEATURES``  - which body measurements define the pose, with a weight
   multiplier for the ones that matter most (a Warrior is judged on its front
   knee and stance width, a Child's pose on how far the hips fold).  Targets and
-  tolerances are NOT here: they are fitted from data by tools/build_library.py.
+  tolerances are NOT here: they are fitted from data by tools/fitting/build_library.py.
 * ``CUES``      - what to say when a measurement is below / above its target,
   worded for that pose ("sit lower", not "adjust your knee").
 * ``STEPS``     - the guided walk-in: each step is an instruction plus the

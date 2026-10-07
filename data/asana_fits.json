@@ -151,10 +151,7 @@
       "datasets\\yoga107\\utkatasana\\064.jpg",
       "datasets\\yoga107\\utkatasana\\068.jpg",
       "datasets\\yoga107\\utkatasana\\072.jpg"
-    ],
-    "enter_score": 60.0,
-    "exit_score": 45.0,
-    "permissive": false
+    ]
   },
   "bhujangasana": {
     "key": "bhujangasana",
@@ -284,10 +281,7 @@
       "datasets\\yoga107\\bhujangasana\\064.jpg",
       "datasets\\yoga107\\bhujangasana\\068.jpg",
       "datasets\\yoga107\\bhujangasana\\072.jpg"
-    ],
-    "enter_score": 71.0,
-    "exit_score": 56.0,
-    "permissive": true
+    ]
   },
   "adho_mukha": {
     "key": "adho_mukha",
@@ -404,10 +398,7 @@
       "datasets\\yoga107\\adho_mukha_svanasana\\060.jpg",
       "datasets\\yoga107\\adho_mukha_svanasana\\064.jpg",
       "datasets\\yoga107\\adho_mukha_svanasana\\068.jpg"
-    ],
-    "enter_score": 60.0,
-    "exit_score": 45.0,
-    "permissive": false
+    ]
   },
   "vrikshasana_fit": {
     "key": "vrikshasana_fit",
@@ -663,10 +654,7 @@
       "datasets\\yoga107\\virabhadrasana_ii\\048.jpg",
       "datasets\\yoga107\\virabhadrasana_ii\\052.jpg",
       "datasets\\yoga107\\virabhadrasana_ii\\056.jpg"
-    ],
-    "enter_score": 60.0,
-    "exit_score": 45.0,
-    "permissive": false
+    ]
   },
   "marjaryasana": {
     "key": "marjaryasana",
@@ -978,10 +966,7 @@
         },
         "n_images": 62
       }
-    },
-    "enter_score": 60.0,
-    "exit_score": 45.0,
-    "permissive": false
+    }
   },
   "tadasana": {
     "key": "tadasana",
@@ -1322,10 +1307,7 @@
         },
         "n_images": 34
       }
-    },
-    "enter_score": 60.0,
-    "exit_score": 45.0,
-    "permissive": false
+    }
   },
   "trikonasana": {
     "key": "trikonasana",
@@ -1446,7 +1428,7 @@
     },
     "sources": [
       "Y:utthita_trikonasana (52 fit, 17 held out)",
-      "C:trikonasana (22 fit, 7 held out)"
+      "C:trikonasana (23 fit, 7 held out)"
     ],
     "holdout": [
       "datasets\\yoga107\\utthita_trikonasana\\004.jpg",
@@ -1472,11 +1454,8 @@
       "datasets\\commons\\trikonasana\\Trikonasana_-_International_Day_of_Yoga_Celebration_-_NCSM_-_Kolkata_2015-06-21_7328.jpg",
       "datasets\\commons\\trikonasana\\Trikonasana_Yoga-Asana_Nina-Mel.jpg",
       "datasets\\commons\\trikonasana\\Vitality_3.jpg",
-      "datasets\\commons\\trikonasana\\Yoga_in_Bryant_Park_01194_.jpg"
-    ],
-    "enter_score": 60.0,
-    "exit_score": 45.0,
-    "permissive": false
+      "datasets\\commons\\trikonasana\\Yoga_at_a_Gym.jpg"
+    ]
   },
   "balasana": {
     "key": "balasana",
@@ -1683,10 +1662,7 @@
         },
         "n_images": 35
       }
-    },
-    "enter_score": 60.0,
-    "exit_score": 45.0,
-    "permissive": false
+    }
   },
   "sukhasana": {
     "key": "sukhasana",
@@ -1785,9 +1761,6 @@
       "datasets\\yoga107\\sukhasana\\040.jpg",
       "datasets\\yoga107\\sukhasana\\044.jpg",
       "datasets\\yoga107\\sukhasana\\048.jpg"
-    ],
-    "enter_score": 60.0,
-    "exit_score": 45.0,
-    "permissive": false
+    ]
   }
 }

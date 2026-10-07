@@ -7,7 +7,7 @@ Two kinds of pose live here and the difference matters:
 * **guided** - no dataset reference exists yet, so the launcher walks the person
   through it with spoken steps and a timer, and says plainly that it is not
   measuring them.  Nothing here invents joint angles for a pose we have no data
-  for; dropping images into a class folder and running tools/fit_asana.py turns
+  for; dropping images into a class folder and running tools/fitting/fit_asana.py turns
   a guided pose into a scored one with no code change (``is_scored`` is read
   from the asana library at run time).
 

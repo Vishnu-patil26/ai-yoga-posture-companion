@@ -8,7 +8,7 @@ terms.  This module is everything about that which can be tested without a
 webcam: who the volunteer is, what they agreed to, where each photo and its
 landmarks go on disk, how to see whether the sample is diverse enough yet, how
 to honour a withdrawal, and how to hand the right-labelled photos to
-tools/fit_asana.py.  collect.py is only the capture window around it.
+tools/fitting/fit_asana.py.  collect.py is only the capture window around it.
 
 On disk (all under COLLECTED_DIR, which is gitignored by a file this module
 writes into it - these are photographs of real people):
@@ -577,7 +577,7 @@ class CollectionSummary:
     #: pose_key -> quality -> volunteer_id -> number of samples
     counts: dict = field(default_factory=dict)
     #: pose_key -> volunteers with at least one RIGHT-labelled sample (the ones
-    #: tools/fit_asana.py will actually learn from)
+    #: tools/fitting/fit_asana.py will actually learn from)
     volunteers_per_pose: dict = field(default_factory=dict)
     #: attribute -> category -> volunteers (every category listed, zeros too)
     diversity: dict = field(default_factory=dict)
@@ -691,7 +691,7 @@ def _purge_export(dest: str, only_id: str | None = None) -> int:
 def export_for_fitting(dest: str) -> dict:
     """Copy every right-labelled photo into ``dest/<pose_key>/<id>_<n>.jpg``.
 
-    That folder-per-class layout is what tools/fit_asana.py reads.  The export
+    That folder-per-class layout is what tools/fitting/fit_asana.py reads.  The export
     mirrors the collection: copies this function made earlier are removed first,
     so a volunteer who has since withdrawn does not linger.  Files it did not
     create are left alone.  ``dest`` may not sit inside the collection folder.

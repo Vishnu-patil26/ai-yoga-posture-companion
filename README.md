@@ -117,13 +117,13 @@ python bootstrap.py --ui      # or launch.bat
    practice and neck-alignment tone. If a pose's fitted reference is ever missing, the
    launcher falls back to a voice-guided timer and says so.
 
-   Honest limits (details and numbers in `docs/VALIDATION.md`): poses are recognised
+   Honest limits (details and numbers in `docs/reports/VALIDATION.md`): poses are recognised
    well, but the score does **not yet reliably judge form quality**, Cobra's reference
    is permissive, and Child's pose is the hardest for a single camera. Only Tree is
    hand-tuned; the rest are fitted from photographs plus per-pose structure in
-   `yoga/posespecs.py`. Rebuild with `python tools/build_library.py`, then
-   `tools/calibrate_thresholds.py`, `tools/library_eval.py`, `tools/external_check.py`,
-   `tools/pose_check.py` (every pose end to end, no camera).
+   `yoga/posespecs.py`. Rebuild with `python tools/fitting/build_library.py`, then
+   `tools/fitting/calibrate_thresholds.py`, `tools/evaluation/library_eval.py`, `tools/evaluation/external_check.py`,
+   `tools/evaluation/pose_check.py` (every pose end to end, no camera).
 
 Checks: `python bootstrap.py --flow` (55 offline checks for routines, profile
 rules and the launcher screens).
@@ -217,7 +217,7 @@ one. Fitted on `train/`, scored on `test/`, which fitting never saw:
 | Virabhadrasana (warrior) | 95 | 81 % |
 | **overall** | **481** | **92 %** |
 
-Reproduce with `tools/fit_asana.py` then `tools/confusion.py`. The two weaker
+Reproduce with `tools/fitting/fit_asana.py` then `tools/evaluation/confusion.py`. The two weaker
 rows are honest: that dataset's "warrior" class mixes Warrior I, II and III,
 which are different shapes sharing one label.
 
@@ -228,7 +228,7 @@ others run in scoring mode and say so rather than reading out instructions
 that do not apply.
 
 Method, citations and the limitations of that sample:
-**[docs/REFERENCES.md](docs/REFERENCES.md)**.
+**[docs/design/REFERENCES.md](docs/design/REFERENCES.md)**.
 
 ---
 
@@ -260,47 +260,52 @@ inference + 0.13 ms scoring per frame; 28 fps end to end including the overlay.
 ## Layout
 
 ```
-bootstrap.py               self-healing setup, doctor and task runner
-app.py                     live trainer (webcam / video / calibration)
-yoga/
-  landmarks.py             MediaPipe BlazePose wrapper -> Pose object
-  filters.py               One-Euro filter, rolling mean
-  angles.py                joint geometry in image space
-  asanas.py                the asana library - fitted reference + variants
-  evaluator.py             measure the body, score it joint by joint
-  state_machine.py         SETUP / HOLDING / COMPLETE, hold timer, hysteresis
-  coach.py                 the spoken guided entry into the pose
-  feedback.py              which cue, when to say it, and the TTS thread
-  overlay.py               skeleton, HUD, reference card, framing panel
-  reference.py             the ideal figure, shared by the card and the tests
-  calibration.py           personal tolerance profile
-  storage.py               SQLite practice log (derived numbers only)
-tools/
-  selftest.py              66 engine checks on synthetic skeletons
-  fit_reference.py         derive the reference angles from a dataset
-  validate_dataset.py      held-out validation against other asanas
-  analyse.py               headless run over a clip/photo -> per-frame CSV
-  simulate_session.py      scripted practice through the real pipeline
-  demo_frames.py           render the overlay to PNGs
-  report.py                practice history / recurring weakness report
-  get_dataset.py           fetch the public dataset
-docs/IMPLEMENTATION.md     design decisions and stage-by-stage mapping
-docs/REFERENCES.md         literature, dataset, fitted angles, validation
+app.py             live camera trainer          launcher.py   the UI: profile -> routine -> plan -> practice
+collect.py         volunteer photo collection   bootstrap.py  self-healing setup, doctor and task runner
+run.bat  launch.bat  setup.bat  test.bat        Windows shortcuts for the above
+
+yoga/              the engine (one package)
+  vision             landmarks.py  filters.py  angles.py
+  scoring            evaluator.py  state_machine.py  calibration.py
+  poses              asanas.py (library + fitted refs)  posespecs.py (per-pose structure, cues, steps)
+                     routines.py (poses, routines)  taxonomy.py (hierarchy + body points)  reference.py
+  coaching           coach.py (Tree walk-in)  guide.py (step guide, every other pose)
+                     feedback.py (cues + voice)  phrasing.py  nlp.py ("Ask the coach")
+  people             profile.py (health profile)  collection.py (volunteer data)  storage.py (practice log)
+  display            overlay.py
+
+tools/             run once / occasionally, grouped by purpose
+  datasets/        get_dataset  get_yoga107  get_yoga_for_all  get_commons_poses
+  fitting/         build_library (refit all poses)  calibrate_thresholds  fit_asana  fit_reference
+  evaluation/      library_eval  external_check  pose_check  deviation_study  confusion
+                   validate_dataset  make_validation (regenerates docs/reports/VALIDATION.md)
+  session/         analyse  simulate_session  demo_frames  report
+tests/             selftest  test_flow  test_nlp  test_collection      (all offline, no camera)
+
+data/              asana_fits.json (the fitted library)   results/ (evaluation outputs)
+                   datasets/ users/ collected/ (git-ignored)   samples/ demo/
+assets/gallery/    the ten pose photos + credits.json
+docs/              design/ (architecture, implementation, references)
+                   reports/ (VALIDATION, ANGLE_DEVIATION - generated)
+                   policy/ (COLLECTION_PROTOCOL, CREDITS)   images/
 ```
 
 ---
 
 ## Status
 
-Implemented: the asana-trainer track, complete, for Vrikshasana — guided entry,
-landmark extraction, jitter filtering, joint geometry, per-joint comparison,
-weakest-link scoring, pose variants, hold timing, spoken correction, personal
-calibration, the live overlay, the practice log, and the offline evaluation
-harness.
+All ten poses run on the live camera trainer with a step-by-step guide. Tree is hand-tuned
+and has the longest guided practice; the other nine are fitted from photographs with
+per-pose structure in `yoga/posespecs.py`. The launcher covers profile, routines, the photo
+gallery with custom routines, the personalised plan and practice.
 
-Next: more asanas (one `Asana(...)` entry and one fitting run each), desk-posture
-mode, contactless vitals (rPPG), an LLM phrasing layer (the hook is in place),
-and packaging.
+Known limits (numbers in [docs/reports/VALIDATION.md](docs/reports/VALIDATION.md)): poses are
+recognised well but form quality is not yet validated; Cobra is permissive; Child's pose is the
+weakest for one camera.
+
+Not yet connected in the launcher: the "Ask the coach" NLP box, the user ID and medication
+fields, and the volunteer-collection button (the modules and tests exist). Next: hand-tune the
+remaining poses with volunteer data, desk-posture mode, rPPG vitals, packaging.
 
 ---
 

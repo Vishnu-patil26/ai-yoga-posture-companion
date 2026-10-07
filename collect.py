@@ -4,7 +4,7 @@
 
 The team's own sample of diverse, healthy volunteers, so the angle references can
 later be refitted on more than the one or two people per pose that the public
-datasets show (see docs/COLLECTION_PROTOCOL.md).  Every volunteer first reads and
+datasets show (see docs/policy/COLLECTION_PROTOCOL.md).  Every volunteer first reads and
 accepts the consent / copyright text, confirms they are healthy, chooses what
 happens to their face (keep, blur, or store points only), and is given a random
 ID - no name is stored.  Then, for each pose, a 5-second countdown is followed by
@@ -566,7 +566,7 @@ class App(tk.Tk):
     def _get_tracker(self):
         if self._tracker is None:
             # Image mode, no smoothing: each photo is judged alone, the same way
-            # tools/fit_asana.py will later re-read the saved images.
+            # tools/fitting/fit_asana.py will later re-read the saved images.
             self._tracker = PoseTracker(model="full", running_mode="image", smooth=False)
         return self._tracker
 
@@ -682,7 +682,7 @@ class App(tk.Tk):
                 + (f"\n\n{res['skipped_no_image']} right-labelled sample(s) have no photo "
                    "(points-only volunteers)." if res["skipped_no_image"] else "")
                 + "\n\nTo refit, write to a separate file so the current references are kept:"
-                  f"\n  python tools/fit_asana.py {rel} --out data/asana_fits_collected.json")
+                  f"\n  python tools/fitting/fit_asana.py {rel} --out data/asana_fits_collected.json")
         self._info("Export for fitting", text)
 
     # ------------------------------------------------------------ withdraw

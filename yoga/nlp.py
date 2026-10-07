@@ -23,7 +23,7 @@ Why classical NLP and not a neural model: the vocabulary is tiny and closed
 on a student laptop, and a viva examiner can follow a lexicon and a cosine
 similarity line by line.  The cost is honest and stated: it understands what
 the lexicons and rules below cover, nothing more, and it is evaluated only on a
-hand-written development set (see tools/test_nlp.py).
+hand-written development set (see tests/test_nlp.py).
 
 Safety stance: this module never gives dosing or diagnosis.  It turns what the
 person says into *cautions* (each ending "check with your doctor") and into

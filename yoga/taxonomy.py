@@ -312,7 +312,7 @@ def measured_features(pose_key: str) -> list[str]:
     """Features the app actually scores for this pose *today*.
 
     Read from the asana library at run time, so it is empty for a guided pose
-    (no fitted reference) and grows by itself when ``tools/fit_asana.py`` turns
+    (no fitted reference) and grows by itself when ``tools/fitting/fit_asana.py`` turns
     a guided pose into a scored one.
     """
     from yoga import asanas

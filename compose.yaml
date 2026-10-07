@@ -10,13 +10,13 @@ services:
   verify:
     build: .
     image: ai-yoga-companion
-    command: python tools/selftest.py
+    command: python tests/selftest.py
 
   session:
     build: .
     image: ai-yoga-companion
     command: >
-      sh -c "python tools/simulate_session.py --quiet && python tools/report.py"
+      sh -c "python tools/session/simulate_session.py --quiet && python tools/session/report.py"
     volumes:
       - ./data:/app/data
 
@@ -28,15 +28,15 @@ services:
       - ./data:/app/data
 
   # Reproduces the fitted reference angles and the held-out validation table in
-  # docs/REFERENCES.md.  Downloads ~100 MB the first time; the dataset is kept
+  # docs/design/REFERENCES.md.  Downloads ~100 MB the first time; the dataset is kept
   # in the mounted ./data so it is only fetched once.
   dataset:
     build: .
     image: ai-yoga-companion
     command: >
-      sh -c "python tools/get_dataset.py &&
-             python tools/fit_reference.py data/datasets/yoga_poses/train/tree &&
-             python tools/validate_dataset.py data/datasets/yoga_poses/test"
+      sh -c "python tools/datasets/get_dataset.py &&
+             python tools/fitting/fit_reference.py data/datasets/yoga_poses/train/tree &&
+             python tools/evaluation/validate_dataset.py data/datasets/yoga_poses/test"
     volumes:
       - ./data:/app/data
 

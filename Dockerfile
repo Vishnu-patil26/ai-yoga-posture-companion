@@ -41,10 +41,10 @@ RUN mkdir -p models \
 COPY . .
 
 # Fail the build if the engine is broken - a green image means a green engine.
-RUN python tools/selftest.py
+RUN python tests/selftest.py
 
 ENV PYTHONUNBUFFERED=1 \
     MPLBACKEND=Agg \
     QT_QPA_PLATFORM=offscreen
 
-CMD ["python", "tools/selftest.py"]
+CMD ["python", "tests/selftest.py"]

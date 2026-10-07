@@ -231,12 +231,12 @@ def repair_models() -> str:
 def check_engine() -> bool:
     if not os.path.isfile(venv_python()):
         return False
-    r = run([venv_python(), os.path.join("tools", "selftest.py")], timeout=600)
+    r = run([venv_python(), os.path.join("tests", "selftest.py")], timeout=600)
     return r.returncode == 0
 
 
 def repair_engine() -> str:
-    r = run([venv_python(), os.path.join("tools", "selftest.py")], timeout=600)
+    r = run([venv_python(), os.path.join("tests", "selftest.py")], timeout=600)
     failing = [ln.strip() for ln in (r.stdout or "").splitlines() if "[FAIL]" in ln]
     if failing:
         return "self-test failures (this is a code problem, not a setup one):\n      " \
@@ -308,7 +308,7 @@ def doctor(fix: bool = True) -> int:
         say("")
         say("  Next:")
         say(f"    {os.path.relpath(venv_python(), ROOT)} app.py            # live trainer (webcam)")
-        say(f"    {os.path.relpath(venv_python(), ROOT)} tools/selftest.py # verify, no camera")
+        say(f"    {os.path.relpath(venv_python(), ROOT)} tests/selftest.py # verify, no camera")
         say("")
         return 0
 
@@ -339,16 +339,16 @@ def doctor(fix: bool = True) -> int:
 TASKS = {
     "run": ["app.py"],
     "ui": ["launcher.py"],
-    "flow": [os.path.join("tools", "test_flow.py")],
+    "flow": [os.path.join("tests", "test_flow.py")],
     "calibrate": ["app.py", "--calibrate"],
-    "test": [os.path.join("tools", "selftest.py")],
-    "demo": [os.path.join("tools", "simulate_session.py")],
-    "report": [os.path.join("tools", "report.py")],
-    "frames": [os.path.join("tools", "demo_frames.py")],
-    "dataset": [os.path.join("tools", "get_dataset.py")],
-    "fit": [os.path.join("tools", "fit_reference.py"),
+    "test": [os.path.join("tests", "selftest.py")],
+    "demo": [os.path.join("tools", "session", "simulate_session.py")],
+    "report": [os.path.join("tools", "session", "report.py")],
+    "frames": [os.path.join("tools", "session", "demo_frames.py")],
+    "dataset": [os.path.join("tools", "datasets", "get_dataset.py")],
+    "fit": [os.path.join("tools", "fitting", "fit_reference.py"),
             os.path.join("data", "datasets", "yoga_poses", "train", "tree")],
-    "validate": [os.path.join("tools", "validate_dataset.py"),
+    "validate": [os.path.join("tools", "evaluation", "validate_dataset.py"),
                  os.path.join("data", "datasets", "yoga_poses", "test")],
 }
 

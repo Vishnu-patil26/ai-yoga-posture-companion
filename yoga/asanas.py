@@ -100,8 +100,8 @@ class Asana:
 #
 # The numbers below are NOT hand-picked.  They were fitted from 195 usable
 # tree-pose photographs (5 subjects) in the public TensorFlow/Moroney yoga-pose
-# dataset with tools/fit_reference.py: target = median, tolerance = 1.5 x the
-# MAD-based robust sigma, bounded.  See docs/REFERENCES.md for the method, the
+# dataset with tools/fitting/fit_reference.py: target = median, tolerance = 1.5 x the
+# MAD-based robust sigma, bounded.  See docs/design/REFERENCES.md for the method, the
 # literature it follows and the limitations of the sample.
 #
 # Where the fitted value disagreed with the textbook ideal, the disagreement is
@@ -284,7 +284,7 @@ def get(key: str) -> Asana:
 # a one-legged standing balance, and each target was argued for against the
 # data one at a time.  That does not scale to a library.
 #
-# The poses below are fitted automatically by tools/fit_asana.py from a
+# The poses below are fitted automatically by tools/fitting/fit_asana.py from a
 # side-agnostic feature vocabulary (bent/straight knee, bent/straight elbow,
 # high/low arm, spine angle, stance width), which is mirror-invariant and so
 # describes an asana without caring which side it is performed on.  Every
@@ -366,7 +366,7 @@ def _setup_hint(key: str) -> str:
 
 def _asana_from_fit(spec: dict) -> Asana:
     checks = _checks_from_fit(spec["checks"], spec["key"])
-    # Accepted alternative forms (see tools/fit_asana.py VARIANT_GROUPS): each one
+    # Accepted alternative forms (see tools/fitting/fit_asana.py VARIANT_GROUPS): each one
     # overrides the base checks it has its own fit for.
     variants = tuple(Variant(key=n.replace(" ", "_"), name=n,
                              overrides=tuple(_checks_from_fit(v["checks"], spec["key"])))
@@ -374,16 +374,16 @@ def _asana_from_fit(spec: dict) -> Asana:
     return Asana(
         key=spec["key"], name=spec["name"], sanskrit=spec["sanskrit"],
         level=int(spec.get("level", 2)), checks=tuple(checks), variants=variants,
-        # Measured on held-out photos (tools/library_eval.py): at 78 a correct
+        # Measured on held-out photos (tools/evaluation/library_eval.py): at 78 a correct
         # Tadasana passes 80% of the time, Cobra 61%, Warrior 66%; at 70 they
         # pass 97% / 74% / 72% while other poses are wrongly accepted only 0-7%
         # of the time (mostly under 2%).  Live webcams are noisier than web
         # photos, so fitted poses start the hold at 70 and release at 55.
-        enter_score=float(spec.get("enter_score", 70.0)),     # tools/calibrate_thresholds.py
+        enter_score=float(spec.get("enter_score", 70.0)),     # tools/fitting/calibrate_thresholds.py
         exit_score=float(spec.get("exit_score", 55.0)),
         setup_hint=_setup_hint(spec["key"]),
         notes=(f"Fitted from {spec.get('n_images', '?')} images of the "
-               f"'{spec.get('source_class')}' class with tools/fit_asana.py."
+               f"'{spec.get('source_class')}' class with tools/fitting/fit_asana.py."
                + (" Small sample - treat the tolerances as provisional."
                   if spec.get("small_sample") else "")),
     )
