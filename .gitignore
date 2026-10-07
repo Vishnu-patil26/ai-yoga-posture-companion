@@ -28,7 +28,6 @@ Thumbs.db
 data/collected/
 data/collected_export/
 data/datasets/_yoga107_parquet/
-data/datasets/yoga107/
 data/users/
 data/results/pose_check/
 # datasets: only the licence-clear ones are committed (see data/datasets/README.md)

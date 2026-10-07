@@ -9,6 +9,7 @@ This project uses third-party images and datasets. Everything below is used unde
 | TensorFlow / Moroney 5-class yoga set (tree, warrior, chair, dog, cobra) | Fitting + held-out validation of Vrikshasana, Virabhadrasana, Utkatasana, Adho Mukha, Bhujangasana | Public download used for research/education; images are not redistributed in this repository |
 | *Yoga for all: A Comprehensive Collection of Yoga Images and Videos dataset* (Zenodo 7818789, Mendeley jc4mmnvcdk) | Tadasana, Marjaryasana-Bitilasana, Bhujangasana right/wrong labels - fitting, validation, angle-deviation study | CC BY 4.0. Only a sample is downloaded by `tools/datasets/get_yoga_for_all.py`; not redistributed here |
 | Wikimedia Commons categories Trikoṇāsana, Bālāsana, Sukhāsana | Fitting + hold-out validation of Trikonasana, Balasana, Sukhasana | Per-file CC licences, recorded in `data/datasets/commons/credits.json` (written by `tools/datasets/get_commons_poses.py`) |
+| 107-pose yoga set, Hugging Face `rotemvahava/yoga-poses-107` (697 photos of 11 classes) | Tadasana, Trikonasana, Warrior II, Balasana, Sukhasana, Cat-Cow fits; extra Chair, Down Dog, Cobra | No licence stated by the host; web photographs belonging to their photographers, included for research and education; removal on request |
 | Yoga-82, Kaggle sets named in `dataset.pdf` | **Not used** - need a signed-in account / request form | - |
 
 ## Gallery photographs (`assets/gallery/`)

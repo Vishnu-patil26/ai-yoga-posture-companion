@@ -259,26 +259,25 @@ inference + 0.13 ms scoring per frame; 28 fps end to end including the overlay.
 
 ## Datasets
 
-Included in the repository (licences allow it; attribution in
-[data/datasets/README.md](data/datasets/README.md) and [docs/policy/CREDITS.md](docs/policy/CREDITS.md)):
-the TensorFlow 5-pose set (Apache-2.0), a sample of *Yoga for all* (CC BY 4.0, Zenodo 7818789) and
-Wikimedia Commons photos (per-file CC). **Not included:** the 107-pose Hugging Face set, which has no
-stated licence, and any volunteer photos. Fetch the 107-pose set with
-`python tools/datasets/get_yoga107.py` (1.1 GB) - the fitted result is committed anyway, in
-`data/asana_fits.json`, so the app runs without it.
+All four datasets are in the repository under `data/datasets/` (details, licences and attribution in
+[data/datasets/README.md](data/datasets/README.md) and [docs/policy/CREDITS.md](docs/policy/CREDITS.md)).
+Only the raw 1.1 GB download of the 107-pose collection and volunteer photos are left out. The fitted
+result is `data/asana_fits.json`; the per-photo landmarks and angles are in
+[data/landmarks/](data/landmarks/README.md).
 
 | Dataset | Used for | Folder | Licence |
 |---|---|---|---|
 | TensorFlow / Moroney 5-class set | Tree hand-tuning; Chair, Down Dog, Cobra fits and their test split | `data/datasets/yoga_poses/` | Apache-2.0 |
-| 107-pose set, Hugging Face `rotemvahava/yoga-poses-107` (5,994 photos) | Tadasana, Trikonasana, Warrior II, Balasana, Sukhasana, Cat-Cow; extra Chair, Down Dog, Cobra | `data/datasets/yoga107/` (fetched, git-ignored) | not stated; not redistributed |
+| 107-pose set, Hugging Face `rotemvahava/yoga-poses-107` (697 of its 5,994 photos) | Tadasana, Trikonasana, Warrior II, Balasana, Sukhasana, Cat-Cow; extra Chair, Down Dog, Cobra | `data/datasets/yoga107/` | not stated by the host; web photographs, included for research and education, removal on request |
 | *Yoga for all* (Zenodo 7818789) - photos labelled right or wrong | External right-vs-wrong check, angle-deviation study (never fitted on) | `data/datasets/yoga_for_all/` | CC BY 4.0 |
 | Wikimedia Commons (Trikoṇāsana) | Extra Trikonasana photos | `data/datasets/commons/` | per-file CC |
 
-Not used: Yoga-82 and the Kaggle sets named in `dataset.pdf` (they need an account or a request
+Not used: Yoga-82 and the other Kaggle sets named in `dataset.pdf` (they need an account or a request
 form). The recipe saying which photos fit which pose is `tools/fitting/build_library.py`; method and
 limits are in [docs/design/REFERENCES.md](docs/design/REFERENCES.md) and
-[docs/reports/VALIDATION.md](docs/reports/VALIDATION.md). Volunteer photos from `collect.py` go to
-`data/collected/` (git-ignored; see [docs/policy/COLLECTION_PROTOCOL.md](docs/policy/COLLECTION_PROTOCOL.md)).
+[docs/reports/VALIDATION.md](docs/reports/VALIDATION.md). Re-download scripts are in
+`tools/datasets/`. Volunteer photos from `collect.py` go to `data/collected/` (git-ignored; see
+[docs/policy/COLLECTION_PROTOCOL.md](docs/policy/COLLECTION_PROTOCOL.md)).
 
 ---
 
@@ -301,13 +300,15 @@ yoga/              the engine (one package)
 
 tools/             run once / occasionally, grouped by purpose
   datasets/        get_dataset  get_yoga107  get_yoga_for_all  get_commons_poses
+                   export_landmarks (-> data/landmarks)  validate_landmarks
   fitting/         build_library (refit all poses)  calibrate_thresholds  fit_asana  fit_reference
   evaluation/      library_eval  external_check  pose_check  deviation_study  confusion
                    validate_dataset  make_validation (regenerates docs/reports/VALIDATION.md)
   session/         analyse  simulate_session  demo_frames  report
-tests/             selftest  test_flow  test_nlp  test_collection      (all offline, no camera)
+tests/             selftest  test_flow  test_nlp  test_collection  test_landmark_export   (offline, no camera)
 
 data/              asana_fits.json (the fitted library)   results/ (evaluation outputs)
+                   landmarks/ (landmark + angle CSVs and skeletons per pose, see its README)
                    datasets/ users/ collected/ (git-ignored)   samples/ demo/
 assets/gallery/    the ten pose photos + credits.json
 docs/              design/ (architecture, implementation, references)
