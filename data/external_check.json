@@ -1,0 +1,50 @@
+{
+  "tadasana": {
+    "n_right": 120,
+    "n_wrong": 60,
+    "mean_right": 79.1,
+    "mean_wrong": 72.8,
+    "auc": 0.602,
+    "right_ge_enter": 0.825,
+    "wrong_ge_enter": 0.667,
+    "wrong_by_fault_mean": {
+      "step_1-_Legs": 73.5,
+      "step_2-_Legs_and_Hand": 64.2,
+      "step_3-_Legs_and_Hand": 88.5,
+      "step_4-_Hands_and_Legs": 64.2,
+      "step_5-_Standing": 73.5
+    }
+  },
+  "marjaryasana": {
+    "n_right": 96,
+    "n_wrong": 45,
+    "mean_right": 52.0,
+    "mean_wrong": 38.4,
+    "auc": 0.631,
+    "right_ge_enter": 0.385,
+    "wrong_ge_enter": 0.156,
+    "wrong_by_fault_mean": {
+      "step_1-_Hand_and_Neck": 26.1,
+      "step_2-_Legs": 41.1,
+      "step_3-_Legs": 35.7,
+      "step_4-_Hand_and_Legs": 51.3
+    }
+  },
+  "bhujangasana": {
+    "n_right": 64,
+    "n_wrong": 70,
+    "mean_right": 62.0,
+    "mean_wrong": 61.9,
+    "auc": 0.492,
+    "right_ge_enter": 0.359,
+    "wrong_ge_enter": 0.371,
+    "wrong_by_fault_mean": {
+      "step_1-_Head": 58.8,
+      "step_1-_Legs": 56.8,
+      "step_2-_Hand_and_Legs": 69.4,
+      "step_2-_Legs": 70.6,
+      "step_3-_Head": 50.5,
+      "step_3-_Legs": 64.9
+    }
+  }
+}

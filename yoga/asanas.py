@@ -38,6 +38,9 @@ class Check:
     cue: str = ""            #: fallback spoken cue
     cue_under: str = ""      #: spoken when the measured value is below target
     cue_over: str = ""       #: spoken when the measured value is above target
+    #: Also sound a short tone when this check's cue fires, so the person hears
+    #: the fault even with their eyes closed or head turned (neck, balance).
+    alert: bool = False
 
     def cue_for(self, deviation: float) -> str:
         if deviation < 0 and self.cue_under:
@@ -121,6 +124,18 @@ VRIKSHASANA = Asana(
         "Tolerances narrow to the practitioner's own body after calibration."
     ),
     checks=(
+        Check(
+            # Neck deviation (meeting 25/9): angle between the spine axis and the
+            # neck axis.  Measured over the 200 tree-pose photographs of the
+            # fitting set: median 11.6 deg, robust sd 9.2, p90 22.2.  A one-sided
+            # check set at the p90 - it fires only when the head is further out
+            # of line than nine in ten correct-looking tree poses - and it sounds
+            # a tone as well as speaking, so it is heard even with the eyes closed.
+            key="neck_dev", label="Neck aligned", target=11.6, tol=10.6, zero_at=36.0,
+            weight=0.8, needs=("torso", "head"), mode="max", alert=True,
+            cue_over="Keep your neck long, chin level, and look straight ahead",
+            cue="Keep your neck long, chin level, and look straight ahead",
+        ),
         Check(
             # Fitted median 3.5 deg on frontal views, p90 5.8.  The target is
             # held at the ideal 0 rather than the median: a leaning spine is a
@@ -288,22 +303,89 @@ _FITS_PATH = _os.path.join(
     "data", "asana_fits.json")
 
 
-def _asana_from_fit(spec: dict) -> Asana:
+#: What to say, per generic feature, when the measured value is BELOW / ABOVE the
+#: fitted target.  "Adjust your higher arm" told people nothing; these say which
+#: way to move.  Angles here are interior joint angles (smaller = more bent) and
+#: arm angles are measured from straight up (smaller = more raised).
+_DIRECTIONAL_CUES = {
+    "knee_bent":      ("Ease that bent knee up a little - not so deep",
+                       "Bend that knee a little deeper"),
+    "knee_straight":  ("Soften that straight leg slightly",
+                       "Straighten your other leg more"),
+    "elbow_bent":     ("Open that bent elbow a little", "Bend that elbow a bit more"),
+    "elbow_straight": ("Soften that elbow slightly", "Straighten your arm"),
+    "arm_raise_high": ("Lower your higher arm a little", "Raise your higher arm more"),
+    "arm_raise_low":  ("Lower your other arm a little", "Raise your other arm more"),
+    "spine_tilt":     ("Ease your torso back a little", "Lift your chest - bring your torso more upright"),
+    "stance_width":   ("Step your feet a little wider", "Bring your feet a little closer"),
+    "neck_dev":       ("", "Keep your neck long and your head over your spine"),
+    "hip_angle_min":  ("Open your hips a little - lift your chest", "Fold a little more at the hips"),
+    "hip_angle_max":  ("Open that hip a little", "Fold a little more at that hip"),
+    "hip_angle_vis":  ("Open your hips a little - lift your chest", "Fold a little more at the hips"),
+    "knee_angle_vis": ("Ease that knee open a little", "Bend that knee a little more"),
+    "elbow_angle_vis": ("Soften that elbow slightly", "Straighten that arm a little more"),
+    "arm_torso_min":  ("Reach that arm a little further", "Bring that arm a little closer in"),
+    "arm_torso_max":  ("Reach that arm a little further", "Bring that arm a little closer in"),
+    "arm_torso_vis":  ("Reach your arm a little further", "Bring your arm a little closer in"),
+    "hip_rise":       ("Lift your hips higher", "Lower your hips a little"),
+    "head_drop":      ("Drop your head a little more", "Lift your head a little"),
+    "thigh_level":    ("", "Lower your hips - bring your thighs closer to level"),
+}
+
+
+#: Upright poses where head-over-spine alignment is the point, so a neck fault
+#: also sounds a tone.  On floor poses (Cobra, Child's) the head is meant to move.
+_NECK_TONE_POSES = {"tadasana", "trikonasana", "virabhadrasana", "utkatasana", "sukhasana"}
+
+
+def _checks_from_fit(fitted: dict, pose_key: str = "") -> list:
+    from . import posespecs
+    cues = posespecs.CUES.get(pose_key, {})
     checks = []
-    for key, c in spec["checks"].items():
+    for key, c in fitted.items():
+        neck = key == "neck_dev"
         checks.append(Check(
             key=key, label=c["label"], target=float(c["target"]),
             tol=float(c["tol"]), zero_at=float(c["zero_at"]),
             weight=float(c["weight"]), unit=c.get("unit", "deg"),
-            needs=("torso",),
-            cue=f"Adjust your {c['label'].lower()}",
+            needs=("torso", "head") if neck else ("torso",),
+            mode="max" if neck else "band", alert=neck and pose_key in _NECK_TONE_POSES,
+            cue=("Keep your neck long and your head over your spine" if neck
+                 else f"Adjust your {c['label'].lower()}"),
+            cue_under=(cues.get(key) or _DIRECTIONAL_CUES.get(key, ("", "")))[0],
+            cue_over=(cues.get(key) or _DIRECTIONAL_CUES.get(key, ("", "")))[1],
         ))
+    return checks
+
+
+def _setup_hint(key: str) -> str:
+    from . import posespecs
+    return posespecs.SETUP_HINTS.get(
+        key, "Stand facing the camera, full body in frame, about 2 m away.")
+
+
+def _asana_from_fit(spec: dict) -> Asana:
+    checks = _checks_from_fit(spec["checks"], spec["key"])
+    # Accepted alternative forms (see tools/fit_asana.py VARIANT_GROUPS): each one
+    # overrides the base checks it has its own fit for.
+    variants = tuple(Variant(key=n.replace(" ", "_"), name=n,
+                             overrides=tuple(_checks_from_fit(v["checks"], spec["key"])))
+                     for n, v in (spec.get("variants") or {}).items())
     return Asana(
         key=spec["key"], name=spec["name"], sanskrit=spec["sanskrit"],
-        level=int(spec.get("level", 2)), checks=tuple(checks),
-        setup_hint="Stand facing the camera, full body in frame, about 2 m away.",
+        level=int(spec.get("level", 2)), checks=tuple(checks), variants=variants,
+        # Measured on held-out photos (tools/library_eval.py): at 78 a correct
+        # Tadasana passes 80% of the time, Cobra 61%, Warrior 66%; at 70 they
+        # pass 97% / 74% / 72% while other poses are wrongly accepted only 0-7%
+        # of the time (mostly under 2%).  Live webcams are noisier than web
+        # photos, so fitted poses start the hold at 70 and release at 55.
+        enter_score=float(spec.get("enter_score", 70.0)),     # tools/calibrate_thresholds.py
+        exit_score=float(spec.get("exit_score", 55.0)),
+        setup_hint=_setup_hint(spec["key"]),
         notes=(f"Fitted from {spec.get('n_images', '?')} images of the "
-               f"'{spec.get('source_class')}' class with tools/fit_asana.py."),
+               f"'{spec.get('source_class')}' class with tools/fit_asana.py."
+               + (" Small sample - treat the tolerances as provisional."
+                  if spec.get("small_sample") else "")),
     )
 
 

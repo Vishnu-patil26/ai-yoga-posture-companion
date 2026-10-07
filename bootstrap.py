@@ -338,6 +338,8 @@ def doctor(fix: bool = True) -> int:
 #: where the virtual environment put its interpreter.
 TASKS = {
     "run": ["app.py"],
+    "ui": ["launcher.py"],
+    "flow": [os.path.join("tools", "test_flow.py")],
     "calibrate": ["app.py", "--calibrate"],
     "test": [os.path.join("tools", "selftest.py")],
     "demo": [os.path.join("tools", "simulate_session.py")],

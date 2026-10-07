@@ -319,3 +319,25 @@ class Speaker:
                     engine.stop()
                 except Exception:
                     pass
+
+
+def play_alert() -> None:
+    """A short two-tone chime for faults the person should hear immediately.
+
+    Runs on its own thread because winsound.Beep blocks for its duration, and
+    never raises - a missing sound device must not stop a practice session.
+    """
+    import threading
+
+    def _beep() -> None:
+        try:
+            import winsound
+            winsound.Beep(880, 110)
+            winsound.Beep(660, 140)
+        except Exception:
+            try:
+                print("", end="", flush=True)
+            except Exception:
+                pass
+
+    threading.Thread(target=_beep, daemon=True).start()

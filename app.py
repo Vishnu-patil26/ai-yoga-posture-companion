@@ -29,13 +29,13 @@ from yoga import asanas as asana_lib
 from yoga import calibration
 from yoga.coach import JOURNEY, QUIET_BEFORE_END_S, SEQUENCE, Coach
 from yoga.evaluator import compute_features, evaluate
-from yoga.feedback import CueEngine, Speaker
+from yoga.feedback import CueEngine, Speaker, play_alert
 from yoga.filters import RollingMean
 from yoga import phrasing
 from yoga.landmarks import PoseTracker
 from yoga.overlay import (
     draw_framing_panel, draw_hud, draw_intro_frame, draw_reference_card,
-    draw_rest_panel, draw_skeleton, draw_step_panel,
+    draw_pose_guide, draw_rest_panel, draw_skeleton, draw_step_panel,
 )
 from yoga.reference import ARM_FORMS, step_figure
 from yoga.state_machine import PoseStateMachine, State
@@ -118,6 +118,11 @@ def parse_args(argv=None) -> argparse.Namespace:
                          "instead of body-relative words")
     ap.add_argument("--no-intro", action="store_true",
                     help="skip the walkthrough and go straight to the camera")
+    ap.add_argument("--no-steps", action="store_true",
+                    help="skip the step-by-step walk-in for fitted poses")
+    ap.add_argument("--stop-after-hold", action="store_true",
+                    help="end the session a few seconds after the first completed hold "
+                         "(used by the routine launcher)")
     ap.add_argument("--demo", action="store_true",
                     help="play the walkthrough only, then exit - for showing "
                          "the whole flow without a camera")
@@ -342,9 +347,11 @@ def run_live(args) -> int:
     guided = asana.key == "vrikshasana"
     if not guided and not args.no_coach:
         args.no_coach = True
-        print(f"note: step-by-step guidance is written for Vrikshasana only, so "
-              f"{asana.sanskrit} runs in scoring mode (hold timer and "
-              f"corrections still active)")
+        from yoga import posespecs as _ps
+        how = ("a step-by-step walk-in and scoring" if _ps.STEPS.get(asana.key)
+               and not args.no_steps else "scoring mode")
+        print(f"note: {asana.sanskrit} runs with {how} (hold timer and corrections active); "
+              f"the longer 12-stage coach is written for Vrikshasana")
 
     cap, live = open_source(args.source, args.width, args.height)
     tracker = PoseTracker(model=args.model)
@@ -405,6 +412,22 @@ def run_live(args) -> int:
     # into the session it would read as "still speaking" and swallow the
     # opening cues.
     speaker.reset_timeline()
+    done_at = None
+    # What to show the person for a pose that has no drawn figure: its photo and
+    # the steps for getting into it (yoga/routines.py is the single source).
+    from yoga import routines as _routines
+    _info = _routines.POSES.get(asana.key)
+    guide_name = _info.name if _info else asana.name
+    guide_steps = _info.steps if _info else ()
+    guide_photo = cv2.imread(os.path.join(HERE, "assets", "gallery", asana.key + ".jpg"))
+    step_guide = None
+    if not guided and not args.no_steps:
+        from yoga import posespecs
+        from yoga.guide import StepGuide
+        _spec = posespecs.STEPS.get(asana.key)
+        if _spec:
+            step_guide = StepGuide(asana, _spec)
+            guide_steps = tuple(s.text for s in step_guide.steps)
 
     try:
         while True:
@@ -457,6 +480,16 @@ def run_live(args) -> int:
                     if log:
                         log.log_cue(t, "coach." + said.step_key, "guide", said.text)
 
+            guide_active = step_guide is not None and not step_guide.finished
+            if guide_active and ev is not None:
+                spoken = step_guide.update(t, ev)
+                if spoken:
+                    banner = spoken
+                    banner_until = t + max(BANNER_HOLD_S, speaker.estimate_seconds(spoken))
+                    speaker.say(spoken, t)
+                    print(f"[{t:6.1f}s] step   {spoken}")
+            guide_active = step_guide is not None and not step_guide.finished
+
             if ev is not None:
                 # CueEngine hands off to the coach whenever the coach still has
                 # something to say (mid-guidance, or the rest window between
@@ -467,8 +500,8 @@ def run_live(args) -> int:
                 # on in time and only competes with it for the speaker.
                 finishing = (state is State.HOLDING
                              and sm.hold_target_s - sm.elapsed <= QUIET_BEFORE_END_S)
-                coach_quiet = not coach.resting and not finishing and (
-                    args.no_coach or (said is None and coach.finished))
+                coach_quiet = (not coach.resting and not finishing and not guide_active and (
+                    args.no_coach or (said is None and coach.finished)))
                 cue = (cues.update(t, ev, state, speaker_busy=speaker.busy(t))
                        if coach_quiet else None)
                 if cue is not None:
@@ -478,6 +511,9 @@ def run_live(args) -> int:
                         speaker.say(cue.text, t)
                         cues.note_spoken(t, speaker.estimate_seconds(cue.text))
                     print(f"[{t:6.1f}s] {cue.level:<6} {cue.text}")
+                    _chk = asana.check(cue.key)
+                    if _chk is not None and _chk.alert and speaker.enabled:
+                        play_alert()
                     if log:
                         log.log_cue(t, cue.key, cue.level, cue.text)
                 if log and ev.usable and t - last_sample >= 0.5:
@@ -495,6 +531,8 @@ def run_live(args) -> int:
                 last = sm.stats.holds[-1]
                 print(f"[{t:6.1f}s] HOLD COMPLETE - {last.duration_s:.1f}s "
                       f"at {last.avg_score:.1f}% average")
+                if done_at is None:
+                    done_at = t
 
             if pose is not None:
                 draw_skeleton(frame, pose, ev, show_raw=args.show_raw)
@@ -514,6 +552,10 @@ def run_live(args) -> int:
                 draw_step_panel(frame, journey, step_index)
                 if coach.resting:
                     draw_rest_panel(frame, coach.rest_remaining, coach.rest_target_s)
+                elif not guided:
+                    draw_pose_guide(frame, guide_photo, guide_name, asana.sanskrit, guide_steps,
+                                    current=(step_guide.index if step_guide else None),
+                                    done=bool(step_guide and step_guide.finished))
                 else:
                     # While holding, cycle the card between the two accepted
                     # arm forms so the practitioner can see both are allowed.
@@ -540,6 +582,9 @@ def run_live(args) -> int:
             if key in (ord("q"), 27):                 # q or Esc
                 break
             if window_closed(WINDOW):
+                break
+            if (getattr(args, "stop_after_hold", False) and done_at is not None
+                    and t - done_at > 3.0):           # let "well held" register
                 break
             if key == ord("v"):
                 speaker.enabled = not speaker.enabled
@@ -593,6 +638,9 @@ def run_live(args) -> int:
     if log:
         print(f"session logged to  : {log.path} (session id {log.session_id})")
     print("-------------------------------------------------")
+    # Read by the routine launcher, which runs several poses in one process.
+    args.result = {"completed": st.completed, "attempted": len(st.holds),
+                   "longest_s": round(st.longest_s, 1), "best": round(st.best_score, 1)}
     return 0
 
 

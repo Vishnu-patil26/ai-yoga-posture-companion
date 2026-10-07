@@ -258,14 +258,16 @@ def draw_hud(frame: np.ndarray, ev: Evaluation | None, sm: PoseStateMachine,
             cv2.putText(frame, mark, (PANEL_W - 34, y), FONT, 0.42, col, 1, cv2.LINE_AA)
             y += 19
         y += 6
-        cv2.putText(frame, f"standing leg: {ev.features.get('standing_side','?')}",
-                    (16, y), FONT, 0.42, COL_DIM, 1, cv2.LINE_AA)
-        y += 16
+        if ev.asana.key == "vrikshasana":                  # only Tree has a standing leg
+            cv2.putText(frame, f"standing leg: {ev.features.get('standing_side','?')}",
+                        (16, y), FONT, 0.42, COL_DIM, 1, cv2.LINE_AA)
+            y += 16
         if ev.variant_name:
             cv2.putText(frame, f"form: {ev.variant_name}", (16, y),
                         FONT, 0.42, COL_DIM, 1, cv2.LINE_AA)
             y += 16
-        if not ev.features.get("group_visibility", {}).get("frontal", 1.0):
+        if (ev.asana.key == "vrikshasana"
+                and not ev.features.get("group_visibility", {}).get("frontal", 1.0)):
             cv2.putText(frame, "turn to face the camera", (16, y),
                         FONT, 0.42, COL_WARN, 1, cv2.LINE_AA)
             y += 16
@@ -376,6 +378,56 @@ def draw_reference_card(frame: np.ndarray, pose: Pose, step_no: int, step_total:
         cv2.putText(frame, f"on this step: {step_seconds:4.1f}s", (x + 14, by - 8),
                     FONT, 0.40, COL_DIM, 1, cv2.LINE_AA)
         _bar(frame, x + 14, by, CARD_W - 28, 9, 0.0, COL_DIM)
+
+
+def draw_pose_guide(frame: np.ndarray, photo: np.ndarray | None, name: str,
+                    sanskrit: str, steps: tuple[str, ...], current: int | None = None,
+                    done: bool = False) -> None:
+    """Bottom-right card for poses without a hand-built figure: photo + steps.
+
+    Only Vrikshasana has the drawn reference figure and the walk-in script.  The
+    other poses used to show Tree's figure, which told people to make the wrong
+    shape; this shows the actual pose and how to get into it.
+    """
+    h, w = frame.shape[:2]
+    x, y = w - CARD_W - 16, h - CARD_H - 16
+    _panel(frame, x, y, CARD_W, CARD_H, alpha=0.84)
+    cv2.rectangle(frame, (x, y), (x + CARD_W, y + CARD_H), (90, 84, 78), 1)
+    cv2.putText(frame, "MAKE THIS SHAPE", (x + 14, y + 22), FONT, 0.46, COL_DIM, 1, cv2.LINE_AA)
+    if current is not None:
+        tag = "all steps done" if done else f"step {min(current + 1, len(steps))}/{len(steps)}"
+        cv2.putText(frame, tag, (x + CARD_W - 112, y + 22), FONT, 0.42,
+                    COL_OK if done else COL_WARN, 1, cv2.LINE_AA)
+    top = y + 32
+    if photo is not None and photo.size:
+        ph = 118
+        scale = ph / photo.shape[0]
+        pw = max(1, int(photo.shape[1] * scale))
+        if pw > CARD_W - 28:
+            scale = (CARD_W - 28) / photo.shape[1]
+            pw, ph = CARD_W - 28, max(1, int(photo.shape[0] * scale))
+        thumb = cv2.resize(photo, (pw, ph), interpolation=cv2.INTER_AREA)
+        frame[top:top + ph, x + (CARD_W - pw) // 2:x + (CARD_W - pw) // 2 + pw] = thumb
+        top += ph + 8
+    cv2.putText(frame, f"{name} ({sanskrit})"[:34], (x + 14, top + 12), FONT, 0.46, COL_TEXT, 1, cv2.LINE_AA)
+    ly = top + 32
+    for i, step in enumerate(steps[:3], 1):
+        # finished steps are green, the one to do now is bright, later ones dim
+        if current is None:
+            colour = COL_DIM
+        elif done or i - 1 < current:
+            colour = COL_OK
+        elif i - 1 == current:
+            colour = COL_TEXT
+        else:
+            colour = COL_DIM
+        for j, line in enumerate(_wrap(step, 33)[:3]):
+            if ly > y + CARD_H - 6:
+                return
+            cv2.putText(frame, (f"{i}. " if j == 0 else "    ") + line, (x + 14, ly),
+                        FONT, 0.38, colour, 1, cv2.LINE_AA)
+            ly += 15
+        ly += 3
 
 
 def draw_step_panel(frame: np.ndarray, journey, current: int) -> None:

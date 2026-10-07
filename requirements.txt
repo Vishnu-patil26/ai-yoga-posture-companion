@@ -12,3 +12,4 @@ opencv-contrib-python>=4.10
 
 numpy>=1.26
 pyttsx3>=2.90        # offline text-to-speech (Windows SAPI5 / macOS NSSpeech / espeak)
+Pillow>=10.0        # pose photos in the launcher gallery, volunteer-photo collection

@@ -16,8 +16,8 @@ import numpy as np
 from . import angles as A
 from .asanas import Asana, Check, Variant
 from .landmarks import (
-    L_ANKLE, L_ELBOW, L_HIP, L_KNEE, L_SHOULDER, L_WRIST, NOSE,
-    R_ANKLE, R_ELBOW, R_HIP, R_KNEE, R_SHOULDER, R_WRIST,
+    L_ANKLE, L_EAR, L_ELBOW, L_HIP, L_KNEE, L_SHOULDER, L_WRIST, NOSE,
+    R_ANKLE, R_EAR, R_ELBOW, R_HIP, R_KNEE, R_SHOULDER, R_WRIST,
     Pose,
 )
 
@@ -49,7 +49,7 @@ FRONTAL_MIN = 0.45
 #: "folded_leg" are resolved per frame to whichever leg the practitioner is on;
 #: "frontal" is 1.0 only when the body is square enough to the camera.
 VISIBILITY_GROUPS = ("torso", "shoulders", "hips", "standing_leg", "folded_leg",
-                     "left_arm", "right_arm", "frontal")
+                     "left_arm", "right_arm", "frontal", "head")
 
 
 def compute_features(pose: Pose) -> dict:
@@ -72,6 +72,10 @@ def compute_features(pose: Pose) -> dict:
         "arm_raise_left": A.tilt_from_vertical(ls, p[L_WRIST]),
         "arm_raise_right": A.tilt_from_vertical(rs, p[R_WRIST]),
         "torso_px": A.distance(mid_sh, mid_hip),
+        # Neck deviation: angle between the spine axis (hips -> shoulders) and
+        # the neck axis (shoulders -> ears).  0 = head stacked over the spine;
+        # a dropped chin, forward head or sideways tilt all raise it.
+        "neck_dev": A.angle_between(mid_sh - mid_hip, (p[L_EAR] + p[R_EAR]) * 0.5 - mid_sh),
     }
 
     # How far the wrists are from the middle of the chest, in torso lengths.
@@ -143,6 +147,41 @@ def compute_features(pose: Pose) -> dict:
     # plane, so they are only meaningful when the body faces the camera - turn
     # 45 degrees and a perfectly level pelvis photographs as a tilted one.
     f["frontality"] = (A.distance(ls, rs) / f["torso_px"]) if f["torso_px"] > 1e-3 else 0.0
+
+    # ---- pose-structure geometry (what makes a sit a sit, a fold a fold) -----
+    # Mirror-invariant like the block above: each left/right pair is sorted into
+    # min/max so the same reference describes either side.
+    #   hip_angle_*   shoulder-hip-knee: 180 standing tall, ~90 seated or in Chair,
+    #                 small when folded over the thighs (Child's pose).
+    #   arm_torso_*   hip-shoulder-wrist: how far the arm is opened from the trunk;
+    #                 ~180 in Downward Dog (arm in line with the back).
+    #   hip_rise      shoulders-to-hips height in torso lengths; positive when the
+    #                 hips are above the shoulders (the inverted V).
+    #   head_drop     nose below the shoulder line in torso lengths (cat vs cow).
+    #   thigh_level   how far the thigh is from horizontal (0 = parallel to floor).
+    ha = [A.joint_angle(ls, lh, p[L_KNEE]), A.joint_angle(rs, rh, p[R_KNEE])]
+    ta = [A.joint_angle(lh, ls, p[L_WRIST]), A.joint_angle(rh, rs, p[R_WRIST])]
+    f["hip_angle_min"], f["hip_angle_max"] = min(ha), max(ha)
+    f["arm_torso_min"], f["arm_torso_max"] = min(ta), max(ta)
+    tp = f["torso_px"]
+    f["hip_rise"] = float(mid_sh[1] - mid_hip[1]) / tp if tp > 1e-3 else float("nan")
+    f["head_drop"] = float(p[NOSE][1] - mid_sh[1]) / tp if tp > 1e-3 else float("nan")
+    f["thigh_level"] = min(A.tilt_from_horizontal(lh, p[L_KNEE]),
+                           A.tilt_from_horizontal(rh, p[R_KNEE]))
+
+    # Side-view poses (Cobra, Child's, Easy, Cat-Cow, Down Dog) hide one arm and
+    # one leg behind the body.  Sorting a left/right pair into min/max then lets the
+    # hidden side's guesswork decide the measurement, so a normal cobra can read as
+    # a deep hip fold.  The *_vis features instead read the side the camera can
+    # actually see (the one whose joints have the higher visibility).
+    v = pose.vis
+    left_leg = min(v[L_SHOULDER], v[L_HIP], v[L_KNEE]) >= min(v[R_SHOULDER], v[R_HIP], v[R_KNEE])
+    left_knee = min(v[L_HIP], v[L_KNEE], v[L_ANKLE]) >= min(v[R_HIP], v[R_KNEE], v[R_ANKLE])
+    left_arm = min(v[L_SHOULDER], v[L_ELBOW], v[L_WRIST]) >= min(v[R_SHOULDER], v[R_ELBOW], v[R_WRIST])
+    f["hip_angle_vis"] = ha[0] if left_leg else ha[1]
+    f["knee_angle_vis"] = f["knee_left"] if left_knee else f["knee_right"]
+    f["elbow_angle_vis"] = f["elbow_left"] if left_arm else f["elbow_right"]
+    f["arm_torso_vis"] = ta[0] if left_arm else ta[1]
 
     f["min_visibility"] = pose.min_visibility()
     f["group_visibility"] = _group_visibility(pose, standing, folded)
@@ -227,6 +266,7 @@ def _group_visibility(pose: Pose, standing: str, folded: str) -> dict:
         "folded_leg": lo(d_hip, d_knee, d_ankle),
         "left_arm": lo(L_SHOULDER, L_ELBOW, L_WRIST),
         "right_arm": lo(R_SHOULDER, R_ELBOW, R_WRIST),
+        "head": lo(L_EAR, R_EAR),
     }
 
 
@@ -327,10 +367,32 @@ def evaluate(asana: Asana, features: dict) -> Evaluation:
     already attempting instead of being told to do the other one.
     """
     if asana.variants:
-        best = max((_evaluate_one(asana, features, v) for v in asana.variants),
-                   key=lambda e: (e.usable, e.score))
-        return best
-    return _evaluate_one(asana, features, None)
+        ev = max((_evaluate_one(asana, features, v) for v in asana.variants),
+                 key=lambda e: (e.usable, e.score))
+    else:
+        ev = _evaluate_one(asana, features, None)
+    return _without_unneeded_facing(asana, ev)
+
+
+def _needs_frontal(asana: Asana) -> bool:
+    every = list(asana.checks) + [c for v in asana.variants for c in v.overrides]
+    return any("frontal" in c.needs for c in every)
+
+
+def _without_unneeded_facing(asana: Asana, ev: "Evaluation") -> "Evaluation":
+    """Only poses that grade shoulder/hip level need the person square-on.
+
+    "Turn to face the camera" is right for Tree, which compares how level the hips
+    are in the image, and wrong for Cobra, Cat-Cow or Child's pose, which are
+    meant to be seen from the side.  The framing dict is copied, never edited in
+    place: one set of measurements is scored against many asanas.
+    """
+    framing = (ev.features or {}).get("framing")
+    if not framing or _needs_frontal(asana):
+        return ev
+    advice = "" if framing.get("advice") == "Turn to face the camera" else framing.get("advice", "")
+    ev.features = {**ev.features, "framing": {**framing, "advice": advice, "facing": True}}
+    return ev
 
 
 def _evaluate_one(asana: Asana, features: dict, variant) -> Evaluation:

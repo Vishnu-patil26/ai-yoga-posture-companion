@@ -8,10 +8,10 @@ correction, times the hold, and keeps a private practice log.
 Final-year project, Department of Computer Engineering, K.C. College of
 Engineering and Management Studies and Research, Thane.
 
-**Five asanas**, each with reference angles fitted from a public dataset:
-Vrikshasana (Tree), Virabhadrasana (Warrior), Utkatasana (Chair),
-Adho Mukha Svanasana (Downward Dog) and Bhujangasana (Cobra). Tree Pose is
-fully guided, step by step, through a complete practice.
+**Ten asanas**: Vrikshasana (Tree, hand-tuned), Tadasana, Trikonasana, Virabhadrasana II,
+Utkatasana, Adho Mukha Svanasana, Bhujangasana, Marjaryasana-Bitilasana, Balasana and
+Sukhasana (fitted from public photographs). Every pose has a guided walk-in; Tree has the
+longest.
 
 ![The trainer holding a pose](docs/images/ui-02-holding.png)
 
@@ -91,6 +91,42 @@ for 3.13+) — or just Docker.
 
 To quit: press `q` or `Esc` with the video window focused, or just close the
 window. Other keys: `v` voice · `g` guide panels · `r` reset · `s` snapshot.
+
+---
+
+## The launcher: profile, routine, plan, practice
+
+```bash
+python bootstrap.py --ui      # or launch.bat
+```
+
+1. **Profile** - diet plan, age, weight, height, bust/shoulder, waist, hip,
+   diabetic, blood pressure, standing or sitting job, location. Stored on this
+   machine only (`data/users/`).
+2. **Routine** - pick by *lifestyle* (desk/sitting, standing workers, homemakers,
+   students, lumbar care), by *goal* (daily energy, back pain, stress relief) or
+   by *body position* (standing, sitting, lying/floor). The one matching your job
+   is pre-selected.
+3. **Plan** - the routine after your profile is applied: holds shortened for age,
+   BP, diabetes or BMI, head-below-heart poses skipped for high BP / 60+, cautions
+   and diet notes. The rules only ever make a routine gentler.
+4. **Practice** - pose by pose, all ten with the live camera trainer. Each pose has its
+   own on-screen card (photo + three steps), a step-by-step spoken walk-in that waits
+   for your body to reach each step, direction-aware corrections ("Sit lower", "Step
+   your feet wider apart") and a hold timer. Tree keeps its longer 12-stage guided
+   practice and neck-alignment tone. If a pose's fitted reference is ever missing, the
+   launcher falls back to a voice-guided timer and says so.
+
+   Honest limits (details and numbers in `docs/VALIDATION.md`): poses are recognised
+   well, but the score does **not yet reliably judge form quality**, Cobra's reference
+   is permissive, and Child's pose is the hardest for a single camera. Only Tree is
+   hand-tuned; the rest are fitted from photographs plus per-pose structure in
+   `yoga/posespecs.py`. Rebuild with `python tools/build_library.py`, then
+   `tools/calibrate_thresholds.py`, `tools/library_eval.py`, `tools/external_check.py`,
+   `tools/pose_check.py` (every pose end to end, no camera).
+
+Checks: `python bootstrap.py --flow` (55 offline checks for routines, profile
+rules and the launcher screens).
 
 ---
 
