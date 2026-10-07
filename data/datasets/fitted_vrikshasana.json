@@ -1,0 +1,119 @@
+{
+  "asana": "vrikshasana",
+  "source": "data/datasets/yoga_poses/train/tree",
+  "n_images": 200,
+  "n_usable": 195,
+  "method": "median +/- 1.5 x (1.4826 x MAD), bounded",
+  "checks": {
+    "spine_tilt": {
+      "target": 4.9018,
+      "tol": 5.0,
+      "robust_sd": 2.6476,
+      "p10": 1.185,
+      "p90": 8.0734,
+      "n": 195,
+      "hand_set_target": 0.0,
+      "hand_set_tol": 7.0
+    },
+    "hip_level": {
+      "target": 12.7304,
+      "tol": 12.0,
+      "robust_sd": 8.3664,
+      "p10": 5.3604,
+      "p90": 33.3517,
+      "n": 195,
+      "hand_set_target": 0.0,
+      "hand_set_tol": 6.0
+    },
+    "shoulder_level": {
+      "target": 5.1604,
+      "tol": 6.6032,
+      "robust_sd": 4.4021,
+      "p10": 1.1515,
+      "p90": 26.0939,
+      "n": 195,
+      "hand_set_target": 0.0,
+      "hand_set_tol": 6.0
+    },
+    "standing_knee": {
+      "target": 176.064,
+      "tol": 6.0,
+      "robust_sd": 3.6442,
+      "p10": 168.2741,
+      "p90": 179.3085,
+      "n": 195,
+      "hand_set_target": 178.0,
+      "hand_set_tol": 8.0
+    },
+    "folded_knee": {
+      "target": 29.6206,
+      "tol": 16.4274,
+      "robust_sd": 10.9516,
+      "p10": 15.3484,
+      "p90": 49.2253,
+      "n": 195,
+      "hand_set_target": 45.0,
+      "hand_set_tol": 22.0
+    },
+    "folded_thigh_open": {
+      "target": 55.9027,
+      "tol": 18.6128,
+      "robust_sd": 12.4085,
+      "p10": 28.6746,
+      "p90": 70.8104,
+      "n": 195,
+      "hand_set_target": 62.0,
+      "hand_set_tol": 20.0
+    },
+    "foot_height_ratio": {
+      "target": 0.8025,
+      "tol": 0.1,
+      "robust_sd": 0.0406,
+      "p10": 0.6983,
+      "p90": 0.8528,
+      "n": 195,
+      "hand_set_target": 0.7,
+      "hand_set_tol": 0.16
+    },
+    "arm_raise_left": {
+      "target": 106.1065,
+      "tol": 45.0,
+      "robust_sd": 67.9453,
+      "p10": 11.1007,
+      "p90": 154.1445,
+      "n": 195,
+      "hand_set_target": 8.0,
+      "hand_set_tol": 24.0
+    },
+    "arm_raise_right": {
+      "target": 71.7854,
+      "tol": 45.0,
+      "robust_sd": 86.1553,
+      "p10": 8.2232,
+      "p90": 157.3074,
+      "n": 195,
+      "hand_set_target": 8.0,
+      "hand_set_tol": 24.0
+    },
+    "elbow_left": {
+      "target": 64.1969,
+      "tol": 45.0,
+      "robust_sd": 38.0977,
+      "p10": 39.4974,
+      "p90": 173.5617,
+      "n": 195,
+      "hand_set_target": 168.0,
+      "hand_set_tol": 26.0
+    },
+    "elbow_right": {
+      "target": 57.0175,
+      "tol": 45.0,
+      "robust_sd": 54.7444,
+      "p10": 16.906,
+      "p90": 164.8635,
+      "n": 195,
+      "hand_set_target": 168.0,
+      "hand_set_tol": 26.0
+    }
+  }
+}

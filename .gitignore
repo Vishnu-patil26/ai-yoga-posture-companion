@@ -9,7 +9,6 @@ __pycache__/
 models/*.task
 
 # generated or derived working data
-data/datasets/
 data/sessions.db
 data/snapshots/
 data/demo/
@@ -29,8 +28,9 @@ Thumbs.db
 data/collected/
 data/collected_export/
 data/datasets/_yoga107_parquet/
-data/datasets/yoga_for_all/
 data/datasets/yoga107/
-data/datasets/commons/
 data/users/
 data/results/pose_check/
+# datasets: only the licence-clear ones are committed (see data/datasets/README.md)
+data/datasets/commons/balasana/
+data/datasets/commons/sukhasana/

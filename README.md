@@ -257,6 +257,31 @@ inference + 0.13 ms scoring per frame; 28 fps end to end including the overlay.
 
 ---
 
+## Datasets
+
+Included in the repository (licences allow it; attribution in
+[data/datasets/README.md](data/datasets/README.md) and [docs/policy/CREDITS.md](docs/policy/CREDITS.md)):
+the TensorFlow 5-pose set (Apache-2.0), a sample of *Yoga for all* (CC BY 4.0, Zenodo 7818789) and
+Wikimedia Commons photos (per-file CC). **Not included:** the 107-pose Hugging Face set, which has no
+stated licence, and any volunteer photos. Fetch the 107-pose set with
+`python tools/datasets/get_yoga107.py` (1.1 GB) - the fitted result is committed anyway, in
+`data/asana_fits.json`, so the app runs without it.
+
+| Dataset | Used for | Folder | Licence |
+|---|---|---|---|
+| TensorFlow / Moroney 5-class set | Tree hand-tuning; Chair, Down Dog, Cobra fits and their test split | `data/datasets/yoga_poses/` | Apache-2.0 |
+| 107-pose set, Hugging Face `rotemvahava/yoga-poses-107` (5,994 photos) | Tadasana, Trikonasana, Warrior II, Balasana, Sukhasana, Cat-Cow; extra Chair, Down Dog, Cobra | `data/datasets/yoga107/` (fetched, git-ignored) | not stated; not redistributed |
+| *Yoga for all* (Zenodo 7818789) - photos labelled right or wrong | External right-vs-wrong check, angle-deviation study (never fitted on) | `data/datasets/yoga_for_all/` | CC BY 4.0 |
+| Wikimedia Commons (Trikoṇāsana) | Extra Trikonasana photos | `data/datasets/commons/` | per-file CC |
+
+Not used: Yoga-82 and the Kaggle sets named in `dataset.pdf` (they need an account or a request
+form). The recipe saying which photos fit which pose is `tools/fitting/build_library.py`; method and
+limits are in [docs/design/REFERENCES.md](docs/design/REFERENCES.md) and
+[docs/reports/VALIDATION.md](docs/reports/VALIDATION.md). Volunteer photos from `collect.py` go to
+`data/collected/` (git-ignored; see [docs/policy/COLLECTION_PROTOCOL.md](docs/policy/COLLECTION_PROTOCOL.md)).
+
+---
+
 ## Layout
 
 ```

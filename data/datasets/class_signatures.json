@@ -1,0 +1,62 @@
+{
+  "tree": {
+    "knee_bent": 29.62,
+    "knee_straight": 176.06,
+    "elbow_bent": 51.69,
+    "elbow_straight": 64.76,
+    "arm_raise_high": 71.79,
+    "arm_raise_low": 112.58,
+    "spine_tilt": 4.9,
+    "stance_width": 1.24,
+    "frontality": 0.48,
+    "_n": 195
+  },
+  "warrior": {
+    "knee_bent": 155.28,
+    "knee_straight": 172.98,
+    "elbow_bent": 91.1,
+    "elbow_straight": 161.66,
+    "arm_raise_high": 81.88,
+    "arm_raise_low": 107.42,
+    "spine_tilt": 66.87,
+    "stance_width": 2.54,
+    "frontality": 0.77,
+    "_n": 172
+  },
+  "chair": {
+    "knee_bent": 118.06,
+    "knee_straight": 129.92,
+    "elbow_bent": 157.98,
+    "elbow_straight": 170.48,
+    "arm_raise_high": 24.78,
+    "arm_raise_low": 34.93,
+    "spine_tilt": 13.23,
+    "stance_width": 0.15,
+    "frontality": 0.4,
+    "_n": 171
+  },
+  "dog": {
+    "knee_bent": 164.83,
+    "knee_straight": 174.68,
+    "elbow_bent": 151.0,
+    "elbow_straight": 172.34,
+    "arm_raise_high": 155.03,
+    "arm_raise_low": 162.63,
+    "spine_tilt": 150.29,
+    "stance_width": 0.26,
+    "frontality": 0.53,
+    "_n": 135
+  },
+  "cobra": {
+    "knee_bent": 168.45,
+    "knee_straight": 174.52,
+    "elbow_bent": 80.14,
+    "elbow_straight": 117.33,
+    "arm_raise_high": 115.95,
+    "arm_raise_low": 146.24,
+    "spine_tilt": 71.64,
+    "stance_width": 0.3,
+    "frontality": 0.67,
+    "_n": 157
+  }
+}
