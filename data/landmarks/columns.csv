@@ -1,0 +1,182 @@
+column,group,unit,definition
+image_id,meta,,stable id: <pose>_<source>_<nnnn>
+pose,meta,,class label (one of the ten poses)
+variant,meta,,"accepted form or dataset step, if any"
+source,meta,,"TF, Y107, COMMONS or ZEN (see data/datasets/README.md)"
+split,meta,,"train / test / holdout (never fitted on) / external (never fitted on, labelled right-wrong)"
+quality,meta,,right / wrong when the source labels form; otherwise unlabelled
+fault,meta,,named fault for wrong photos (ZEN only)
+licence,meta,,licence of the source photo
+image,meta,,path of the source photo relative to the repository root
+image_in_repo,meta,,True if the photo is committed to GitHub; False if it must be fetched
+width,meta,,photo width in pixels
+height,meta,,photo height in pixels
+usable,meta,,torso visible enough to score (the gate the fits use)
+torso_visibility,meta,,"lowest visibility of shoulders and hips, 0-1"
+min_visibility,meta,,"lowest visibility over the core landmarks, 0-1"
+NOSE_x,landmark,0-1,"NOSE horizontal position, image-normalised"
+NOSE_y,landmark,0-1,"NOSE vertical position, image-normalised (down = larger)"
+NOSE_z,landmark,metres,"NOSE WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+NOSE_vis,landmark,0-1,NOSE visibility reported by BlazePose
+LEFT_EYE_INNER_x,landmark,0-1,"LEFT_EYE_INNER horizontal position, image-normalised"
+LEFT_EYE_INNER_y,landmark,0-1,"LEFT_EYE_INNER vertical position, image-normalised (down = larger)"
+LEFT_EYE_INNER_z,landmark,metres,"LEFT_EYE_INNER WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+LEFT_EYE_INNER_vis,landmark,0-1,LEFT_EYE_INNER visibility reported by BlazePose
+LEFT_EYE_x,landmark,0-1,"LEFT_EYE horizontal position, image-normalised"
+LEFT_EYE_y,landmark,0-1,"LEFT_EYE vertical position, image-normalised (down = larger)"
+LEFT_EYE_z,landmark,metres,"LEFT_EYE WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+LEFT_EYE_vis,landmark,0-1,LEFT_EYE visibility reported by BlazePose
+LEFT_EYE_OUTER_x,landmark,0-1,"LEFT_EYE_OUTER horizontal position, image-normalised"
+LEFT_EYE_OUTER_y,landmark,0-1,"LEFT_EYE_OUTER vertical position, image-normalised (down = larger)"
+LEFT_EYE_OUTER_z,landmark,metres,"LEFT_EYE_OUTER WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+LEFT_EYE_OUTER_vis,landmark,0-1,LEFT_EYE_OUTER visibility reported by BlazePose
+RIGHT_EYE_INNER_x,landmark,0-1,"RIGHT_EYE_INNER horizontal position, image-normalised"
+RIGHT_EYE_INNER_y,landmark,0-1,"RIGHT_EYE_INNER vertical position, image-normalised (down = larger)"
+RIGHT_EYE_INNER_z,landmark,metres,"RIGHT_EYE_INNER WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+RIGHT_EYE_INNER_vis,landmark,0-1,RIGHT_EYE_INNER visibility reported by BlazePose
+RIGHT_EYE_x,landmark,0-1,"RIGHT_EYE horizontal position, image-normalised"
+RIGHT_EYE_y,landmark,0-1,"RIGHT_EYE vertical position, image-normalised (down = larger)"
+RIGHT_EYE_z,landmark,metres,"RIGHT_EYE WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+RIGHT_EYE_vis,landmark,0-1,RIGHT_EYE visibility reported by BlazePose
+RIGHT_EYE_OUTER_x,landmark,0-1,"RIGHT_EYE_OUTER horizontal position, image-normalised"
+RIGHT_EYE_OUTER_y,landmark,0-1,"RIGHT_EYE_OUTER vertical position, image-normalised (down = larger)"
+RIGHT_EYE_OUTER_z,landmark,metres,"RIGHT_EYE_OUTER WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+RIGHT_EYE_OUTER_vis,landmark,0-1,RIGHT_EYE_OUTER visibility reported by BlazePose
+LEFT_EAR_x,landmark,0-1,"LEFT_EAR horizontal position, image-normalised"
+LEFT_EAR_y,landmark,0-1,"LEFT_EAR vertical position, image-normalised (down = larger)"
+LEFT_EAR_z,landmark,metres,"LEFT_EAR WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+LEFT_EAR_vis,landmark,0-1,LEFT_EAR visibility reported by BlazePose
+RIGHT_EAR_x,landmark,0-1,"RIGHT_EAR horizontal position, image-normalised"
+RIGHT_EAR_y,landmark,0-1,"RIGHT_EAR vertical position, image-normalised (down = larger)"
+RIGHT_EAR_z,landmark,metres,"RIGHT_EAR WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+RIGHT_EAR_vis,landmark,0-1,RIGHT_EAR visibility reported by BlazePose
+MOUTH_LEFT_x,landmark,0-1,"MOUTH_LEFT horizontal position, image-normalised"
+MOUTH_LEFT_y,landmark,0-1,"MOUTH_LEFT vertical position, image-normalised (down = larger)"
+MOUTH_LEFT_z,landmark,metres,"MOUTH_LEFT WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+MOUTH_LEFT_vis,landmark,0-1,MOUTH_LEFT visibility reported by BlazePose
+MOUTH_RIGHT_x,landmark,0-1,"MOUTH_RIGHT horizontal position, image-normalised"
+MOUTH_RIGHT_y,landmark,0-1,"MOUTH_RIGHT vertical position, image-normalised (down = larger)"
+MOUTH_RIGHT_z,landmark,metres,"MOUTH_RIGHT WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+MOUTH_RIGHT_vis,landmark,0-1,MOUTH_RIGHT visibility reported by BlazePose
+LEFT_SHOULDER_x,landmark,0-1,"LEFT_SHOULDER horizontal position, image-normalised"
+LEFT_SHOULDER_y,landmark,0-1,"LEFT_SHOULDER vertical position, image-normalised (down = larger)"
+LEFT_SHOULDER_z,landmark,metres,"LEFT_SHOULDER WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+LEFT_SHOULDER_vis,landmark,0-1,LEFT_SHOULDER visibility reported by BlazePose
+RIGHT_SHOULDER_x,landmark,0-1,"RIGHT_SHOULDER horizontal position, image-normalised"
+RIGHT_SHOULDER_y,landmark,0-1,"RIGHT_SHOULDER vertical position, image-normalised (down = larger)"
+RIGHT_SHOULDER_z,landmark,metres,"RIGHT_SHOULDER WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+RIGHT_SHOULDER_vis,landmark,0-1,RIGHT_SHOULDER visibility reported by BlazePose
+LEFT_ELBOW_x,landmark,0-1,"LEFT_ELBOW horizontal position, image-normalised"
+LEFT_ELBOW_y,landmark,0-1,"LEFT_ELBOW vertical position, image-normalised (down = larger)"
+LEFT_ELBOW_z,landmark,metres,"LEFT_ELBOW WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+LEFT_ELBOW_vis,landmark,0-1,LEFT_ELBOW visibility reported by BlazePose
+RIGHT_ELBOW_x,landmark,0-1,"RIGHT_ELBOW horizontal position, image-normalised"
+RIGHT_ELBOW_y,landmark,0-1,"RIGHT_ELBOW vertical position, image-normalised (down = larger)"
+RIGHT_ELBOW_z,landmark,metres,"RIGHT_ELBOW WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+RIGHT_ELBOW_vis,landmark,0-1,RIGHT_ELBOW visibility reported by BlazePose
+LEFT_WRIST_x,landmark,0-1,"LEFT_WRIST horizontal position, image-normalised"
+LEFT_WRIST_y,landmark,0-1,"LEFT_WRIST vertical position, image-normalised (down = larger)"
+LEFT_WRIST_z,landmark,metres,"LEFT_WRIST WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+LEFT_WRIST_vis,landmark,0-1,LEFT_WRIST visibility reported by BlazePose
+RIGHT_WRIST_x,landmark,0-1,"RIGHT_WRIST horizontal position, image-normalised"
+RIGHT_WRIST_y,landmark,0-1,"RIGHT_WRIST vertical position, image-normalised (down = larger)"
+RIGHT_WRIST_z,landmark,metres,"RIGHT_WRIST WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+RIGHT_WRIST_vis,landmark,0-1,RIGHT_WRIST visibility reported by BlazePose
+LEFT_PINKY_x,landmark,0-1,"LEFT_PINKY horizontal position, image-normalised"
+LEFT_PINKY_y,landmark,0-1,"LEFT_PINKY vertical position, image-normalised (down = larger)"
+LEFT_PINKY_z,landmark,metres,"LEFT_PINKY WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+LEFT_PINKY_vis,landmark,0-1,LEFT_PINKY visibility reported by BlazePose
+RIGHT_PINKY_x,landmark,0-1,"RIGHT_PINKY horizontal position, image-normalised"
+RIGHT_PINKY_y,landmark,0-1,"RIGHT_PINKY vertical position, image-normalised (down = larger)"
+RIGHT_PINKY_z,landmark,metres,"RIGHT_PINKY WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+RIGHT_PINKY_vis,landmark,0-1,RIGHT_PINKY visibility reported by BlazePose
+LEFT_INDEX_x,landmark,0-1,"LEFT_INDEX horizontal position, image-normalised"
+LEFT_INDEX_y,landmark,0-1,"LEFT_INDEX vertical position, image-normalised (down = larger)"
+LEFT_INDEX_z,landmark,metres,"LEFT_INDEX WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+LEFT_INDEX_vis,landmark,0-1,LEFT_INDEX visibility reported by BlazePose
+RIGHT_INDEX_x,landmark,0-1,"RIGHT_INDEX horizontal position, image-normalised"
+RIGHT_INDEX_y,landmark,0-1,"RIGHT_INDEX vertical position, image-normalised (down = larger)"
+RIGHT_INDEX_z,landmark,metres,"RIGHT_INDEX WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+RIGHT_INDEX_vis,landmark,0-1,RIGHT_INDEX visibility reported by BlazePose
+LEFT_THUMB_x,landmark,0-1,"LEFT_THUMB horizontal position, image-normalised"
+LEFT_THUMB_y,landmark,0-1,"LEFT_THUMB vertical position, image-normalised (down = larger)"
+LEFT_THUMB_z,landmark,metres,"LEFT_THUMB WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+LEFT_THUMB_vis,landmark,0-1,LEFT_THUMB visibility reported by BlazePose
+RIGHT_THUMB_x,landmark,0-1,"RIGHT_THUMB horizontal position, image-normalised"
+RIGHT_THUMB_y,landmark,0-1,"RIGHT_THUMB vertical position, image-normalised (down = larger)"
+RIGHT_THUMB_z,landmark,metres,"RIGHT_THUMB WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+RIGHT_THUMB_vis,landmark,0-1,RIGHT_THUMB visibility reported by BlazePose
+LEFT_HIP_x,landmark,0-1,"LEFT_HIP horizontal position, image-normalised"
+LEFT_HIP_y,landmark,0-1,"LEFT_HIP vertical position, image-normalised (down = larger)"
+LEFT_HIP_z,landmark,metres,"LEFT_HIP WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+LEFT_HIP_vis,landmark,0-1,LEFT_HIP visibility reported by BlazePose
+RIGHT_HIP_x,landmark,0-1,"RIGHT_HIP horizontal position, image-normalised"
+RIGHT_HIP_y,landmark,0-1,"RIGHT_HIP vertical position, image-normalised (down = larger)"
+RIGHT_HIP_z,landmark,metres,"RIGHT_HIP WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+RIGHT_HIP_vis,landmark,0-1,RIGHT_HIP visibility reported by BlazePose
+LEFT_KNEE_x,landmark,0-1,"LEFT_KNEE horizontal position, image-normalised"
+LEFT_KNEE_y,landmark,0-1,"LEFT_KNEE vertical position, image-normalised (down = larger)"
+LEFT_KNEE_z,landmark,metres,"LEFT_KNEE WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+LEFT_KNEE_vis,landmark,0-1,LEFT_KNEE visibility reported by BlazePose
+RIGHT_KNEE_x,landmark,0-1,"RIGHT_KNEE horizontal position, image-normalised"
+RIGHT_KNEE_y,landmark,0-1,"RIGHT_KNEE vertical position, image-normalised (down = larger)"
+RIGHT_KNEE_z,landmark,metres,"RIGHT_KNEE WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+RIGHT_KNEE_vis,landmark,0-1,RIGHT_KNEE visibility reported by BlazePose
+LEFT_ANKLE_x,landmark,0-1,"LEFT_ANKLE horizontal position, image-normalised"
+LEFT_ANKLE_y,landmark,0-1,"LEFT_ANKLE vertical position, image-normalised (down = larger)"
+LEFT_ANKLE_z,landmark,metres,"LEFT_ANKLE WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+LEFT_ANKLE_vis,landmark,0-1,LEFT_ANKLE visibility reported by BlazePose
+RIGHT_ANKLE_x,landmark,0-1,"RIGHT_ANKLE horizontal position, image-normalised"
+RIGHT_ANKLE_y,landmark,0-1,"RIGHT_ANKLE vertical position, image-normalised (down = larger)"
+RIGHT_ANKLE_z,landmark,metres,"RIGHT_ANKLE WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+RIGHT_ANKLE_vis,landmark,0-1,RIGHT_ANKLE visibility reported by BlazePose
+LEFT_HEEL_x,landmark,0-1,"LEFT_HEEL horizontal position, image-normalised"
+LEFT_HEEL_y,landmark,0-1,"LEFT_HEEL vertical position, image-normalised (down = larger)"
+LEFT_HEEL_z,landmark,metres,"LEFT_HEEL WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+LEFT_HEEL_vis,landmark,0-1,LEFT_HEEL visibility reported by BlazePose
+RIGHT_HEEL_x,landmark,0-1,"RIGHT_HEEL horizontal position, image-normalised"
+RIGHT_HEEL_y,landmark,0-1,"RIGHT_HEEL vertical position, image-normalised (down = larger)"
+RIGHT_HEEL_z,landmark,metres,"RIGHT_HEEL WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+RIGHT_HEEL_vis,landmark,0-1,RIGHT_HEEL visibility reported by BlazePose
+LEFT_FOOT_INDEX_x,landmark,0-1,"LEFT_FOOT_INDEX horizontal position, image-normalised"
+LEFT_FOOT_INDEX_y,landmark,0-1,"LEFT_FOOT_INDEX vertical position, image-normalised (down = larger)"
+LEFT_FOOT_INDEX_z,landmark,metres,"LEFT_FOOT_INDEX WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+LEFT_FOOT_INDEX_vis,landmark,0-1,LEFT_FOOT_INDEX visibility reported by BlazePose
+RIGHT_FOOT_INDEX_x,landmark,0-1,"RIGHT_FOOT_INDEX horizontal position, image-normalised"
+RIGHT_FOOT_INDEX_y,landmark,0-1,"RIGHT_FOOT_INDEX vertical position, image-normalised (down = larger)"
+RIGHT_FOOT_INDEX_z,landmark,metres,"RIGHT_FOOT_INDEX WORLD depth, hip-centred (not the image-relative z of the raw BlazePose output)"
+RIGHT_FOOT_INDEX_vis,landmark,0-1,RIGHT_FOOT_INDEX visibility reported by BlazePose
+left_knee_angle,angle (side),deg,"hip-knee-ankle interior angle, left (180 = straight)"
+right_knee_angle,angle (side),deg,"hip-knee-ankle interior angle, right"
+left_elbow_angle,angle (side),deg,"shoulder-elbow-wrist interior angle, left"
+right_elbow_angle,angle (side),deg,"shoulder-elbow-wrist interior angle, right"
+left_shoulder_angle,angle (side),deg,"hip-shoulder-elbow angle, left"
+right_shoulder_angle,angle (side),deg,"hip-shoulder-elbow angle, right"
+left_hip_angle,angle (side),deg,"shoulder-hip-knee angle, left (180 = standing tall)"
+right_hip_angle,angle (side),deg,"shoulder-hip-knee angle, right"
+left_arm_raise,angle (side),deg,"shoulder-to-wrist angle from vertical, left (0 = straight up)"
+right_arm_raise,angle (side),deg,"shoulder-to-wrist angle from vertical, right"
+knee_bent,angle (mirror-invariant),deg,hip-knee-ankle angle of the more bent leg (side-agnostic)
+knee_straight,angle (mirror-invariant),deg,hip-knee-ankle angle of the straighter leg (side-agnostic)
+elbow_bent,angle (mirror-invariant),deg,shoulder-elbow-wrist angle of the more bent arm (side-agnostic)
+elbow_straight,angle (mirror-invariant),deg,shoulder-elbow-wrist angle of the straighter arm (side-agnostic)
+arm_raise_high,angle (mirror-invariant),deg,shoulder-to-wrist angle from vertical for the higher arm (0 = straight up)
+arm_raise_low,angle (mirror-invariant),deg,shoulder-to-wrist angle from vertical for the lower arm
+hip_angle_min,angle (mirror-invariant),deg,"shoulder-hip-knee angle of the more folded side (180 = standing tall, small = folded)"
+hip_angle_max,angle (mirror-invariant),deg,shoulder-hip-knee angle of the more open side
+arm_torso_min,angle (mirror-invariant),deg,hip-shoulder-wrist angle of the arm closer to the trunk (how far the arm is opened)
+arm_torso_max,angle (mirror-invariant),deg,hip-shoulder-wrist angle of the arm further from the trunk
+hip_angle_vis,angle (visible side),deg,shoulder-hip-knee angle on the side the camera can see (for side-view poses)
+knee_angle_vis,angle (visible side),deg,hip-knee-ankle angle on the visible side (for side-view poses)
+elbow_angle_vis,angle (visible side),deg,shoulder-elbow-wrist angle on the visible side (for side-view poses)
+arm_torso_vis,angle (visible side),deg,hip-shoulder-wrist angle on the visible side (for side-view poses)
+spine_tilt,angle (body),deg,lean of the hip-to-shoulder line from vertical (0 = upright)
+spine_tilt_signed,angle (body),deg,"the same lean with a sign, so a left and a right side-bend differ"
+neck_dev,angle (body),deg,angle between the spine and the shoulder-to-ear line (0 = head stacked)
+shoulder_level,angle (body),deg,how far the shoulder line is from horizontal
+hip_level,angle (body),deg,how far the hip line is from horizontal
+thigh_level,angle (body),deg,how far the thigh is from horizontal (0 = parallel to the floor)
+hip_rise,angle (body),torso lengths,"how far the hips are above the shoulders, in torso lengths (inverted V is positive)"
+head_drop,angle (body),torso lengths,"how far the nose is below the shoulder line, in torso lengths (cat vs cow)"
+stance_width,angle (body),torso lengths,distance between the ankles in torso lengths (feet apart or together)
+frontality,angle (body),ratio,"shoulder width over torso length (about 0.5+ = facing the camera, near 0 = side-on)"
