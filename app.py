@@ -11,7 +11,9 @@ log.  No video is recorded; frames are used and discarded.
     python app.py --no-voice               # silent, for a quiet room / viva
 
 Quit with q or Esc (video window focused), or by closing the window.
-Other keys:  v voice on/off   g guide panels   m metric numbers   r reset   s snapshot
+Other keys:  n / b next / previous pose   l pose list (or 1-9, 0)   d demo video   v voice on/off
+             a say the last instruction again   g guide panels   m metric numbers   r reset   s snapshot
+Everything above is also a button across the top of the camera window.
 """
 
 from __future__ import annotations
@@ -31,12 +33,14 @@ from yoga.coach import JOURNEY, QUIET_BEFORE_END_S, SEQUENCE, Coach
 from yoga.evaluator import compute_features, evaluate
 from yoga.feedback import CueEngine, Speaker, play_alert
 from yoga.filters import RollingMean
-from yoga import phrasing
+from yoga import demo, phrasing, theme
 from yoga.landmarks import PoseTracker
 from yoga.overlay import (
-    draw_framing_panel, draw_hud, draw_intro_frame, draw_reference_card,
-    draw_pose_guide, draw_rest_panel, draw_skeleton, draw_step_panel,
+    CARD_W, COL_OK, DEMO_BOX_H, draw_calibration, draw_demo_panel, draw_framing_panel, draw_hud,
+    draw_intro_frame, draw_pose_guide, draw_pose_menu, draw_reference_card, draw_rest_panel,
+    draw_skeleton, draw_step_panel, draw_toolbar,
 )
+from yoga.overlay import hit as overlay_hit
 from yoga.reference import ARM_FORMS, step_figure
 from yoga.state_machine import PoseStateMachine, State
 from yoga.storage import SessionLog
@@ -120,6 +124,8 @@ def parse_args(argv=None) -> argparse.Namespace:
                     help="skip the walkthrough and go straight to the camera")
     ap.add_argument("--no-steps", action="store_true",
                     help="skip the step-by-step walk-in for fitted poses")
+    ap.add_argument("--lock-pose", action="store_true",
+                    help="do not let the camera window switch to another pose")
     ap.add_argument("--stop-after-hold", action="store_true",
                     help="end the session a few seconds after the first completed hold "
                          "(used by the routine launcher)")
@@ -170,6 +176,93 @@ def _open_camera(index: int, width: int, height: int):
     )
 
 
+def _screen_size() -> tuple[int, int]:
+    """Usable screen size in pixels (a sensible default where it cannot be read)."""
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            u = ctypes.windll.user32
+            return int(u.GetSystemMetrics(0)), int(u.GetSystemMetrics(1))
+        except Exception:
+            pass
+    return 1920, 1080
+
+
+_OPEN: set[str] = set()                #: windows this module has created and not yet destroyed
+
+
+def open_window(name: str, width: int, height: int) -> None:
+    """Create the camera window once, resizable, no bigger than the screen.
+
+    A fixed-size OpenCV window that is maximised shows the picture in one corner
+    and grey everywhere else.  A normal window can be resized, and `show()` below
+    scales the picture to whatever size it has.  Calling this again for a window
+    that is already open does nothing (so it never undoes the size the user chose).
+    """
+    if name in _OPEN:
+        return
+    sw, sh = _screen_size()
+    s = min(1.0, (sw * 0.94) / width, (sh * 0.88) / height)
+    cv2.namedWindow(name, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
+    cv2.resizeWindow(name, int(width * s), int(height * s))
+    _OPEN.add(name)
+
+
+def close_windows() -> None:
+    """Destroy every window and forget them, so the next session builds a fresh one."""
+    _OPEN.clear()
+    _VIEW.clear()
+    cv2.destroyAllWindows()
+
+
+#: window name -> (scale, x offset, y offset) of the picture inside the window, for clicks
+_VIEW: dict[str, tuple[float, float, float]] = {}
+
+
+def show(name: str, frame: np.ndarray) -> None:
+    """imshow, but scaled (with black bars) to fill the window at its current size."""
+    try:
+        _x, _y, ww, wh = cv2.getWindowImageRect(name)
+    except cv2.error:
+        ww = wh = 0
+    h, w = frame.shape[:2]
+    if ww > 64 and wh > 64 and (ww, wh) != (w, h):
+        scale = min(ww / w, wh / h)
+        nw, nh = max(1, round(w * scale)), max(1, round(h * scale))
+        _VIEW[name] = (nw / w, (ww - nw) // 2, (wh - nh) // 2)
+        frame = fit_frame(frame, ww, wh)
+    else:
+        _VIEW[name] = (1.0, 0.0, 0.0)
+    cv2.imshow(name, frame)
+
+
+def window_to_frame(name: str, x: float, y: float) -> tuple[float, float]:
+    """A point in the window -> the same point in the 1280x720 picture."""
+    scale, ox, oy = _VIEW.get(name, (1.0, 0.0, 0.0))
+    return (x - ox) / scale, (y - oy) / scale
+
+
+def fit_frame(frame: np.ndarray, width: int, height: int) -> np.ndarray:
+    """Letterbox a camera frame into ``width`` x ``height``.
+
+    The panels are laid out for a 1280x720 picture.  A webcam that answers with
+    640x480 (or 1920x1080) would otherwise put the left panel and the right-hand
+    cards over almost the whole image.  Scaling to fit, with black bars, keeps
+    the layout the same whatever the camera or video file delivers.
+    """
+    h, w = frame.shape[:2]
+    if (w, h) == (width, height):
+        return frame
+    s = min(width / w, height / h)
+    nw, nh = max(1, round(w * s)), max(1, round(h * s))
+    im = cv2.resize(frame, (nw, nh), interpolation=cv2.INTER_AREA if s < 1 else cv2.INTER_LINEAR)
+    out = np.empty((height, width, 3), np.uint8)
+    out[:] = theme.bgr(theme.TOKENS["bg"])
+    y, x = (height - nh) // 2, (width - nw) // 2
+    out[y:y + nh, x:x + nw] = im
+    return out
+
+
 def open_source(source: str, width: int, height: int):
     if source.isdigit():
         return _open_camera(int(source), width, height), True
@@ -198,6 +291,7 @@ def run_intro(args, asana, speaker, record_writer=None, journey=None) -> bool:
     or short the instruction happens to be.
     """
     width, height = args.width, args.height
+    open_window(WINDOW, width, height)
     canvas = np.zeros((height, width, 3), np.uint8)
     # One clock for the whole walkthrough, not one per slide, so the speaker's
     # "when am I next free" stamps stay on a single monotonic timeline.
@@ -224,7 +318,7 @@ def run_intro(args, asana, speaker, record_writer=None, journey=None) -> bool:
                 speaker.say(step.say, now - started)
                 print(f"  [walkthrough {index + 1}/{len(journey)}] {step.title}")
             draw_intro_frame(canvas, asana, journey, index, pose, elapsed, total_s)
-            cv2.imshow(WINDOW, canvas)
+            show(WINDOW, canvas)
             if record_writer is not None:
                 record_writer.write(canvas)
 
@@ -246,6 +340,7 @@ def run_calibration(args) -> int:
     cap, _ = open_source(args.source, args.width, args.height)
     tracker = PoseTracker(model=args.model)
     speaker = Speaker(enabled=not args.no_voice)
+    open_window(WINDOW_CALIBRATE, args.width, args.height)
     samples: list[dict] = []
     countdown, capture_s = 6.0, 8.0
     t0 = time.perf_counter()
@@ -263,10 +358,13 @@ def run_calibration(args) -> int:
             ok, frame = cap.read()
             if not ok:
                 break
+            frame = fit_frame(frame, args.width, args.height)
             if not args.no_mirror:
                 frame = cv2.flip(frame, 1)
             t = time.perf_counter() - t0
             pose = tracker.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), int(t * 1000))
+            if pose is not None:
+                draw_skeleton(frame, pose, None)
 
             if t < countdown:
                 left = int(countdown - t) + 1
@@ -274,20 +372,16 @@ def run_calibration(args) -> int:
                     spoken.add(left)
                     if left <= 3:
                         speaker.say(str(left))
-                cv2.putText(frame, f"Get into the pose... {left}", (40, 70),
-                            cv2.FONT_HERSHEY_SIMPLEX, 1.1, (60, 190, 250), 3, cv2.LINE_AA)
+                draw_calibration(frame, f"Get into the pose...  {left}", asana.setup_hint)
             else:
                 if pose is not None:
                     feats = compute_features(pose)
                     if evaluate(asana, feats).usable:
                         samples.append(feats)
                 remaining = max(0.0, countdown + capture_s - t)
-                cv2.putText(frame, f"HOLD  {len(samples)} samples  {remaining:.1f}s left",
-                            (40, 70), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (120, 220, 120), 3, cv2.LINE_AA)
-
-            if pose is not None:
-                draw_skeleton(frame, pose, None)
-            cv2.imshow(WINDOW_CALIBRATE, frame)
+                draw_calibration(frame, f"HOLD   {remaining:.1f}s left",
+                                 f"{len(samples)} usable samples so far", COL_OK)
+            show(WINDOW_CALIBRATE, frame)
             if cv2.waitKey(1) & 0xFF in (ord("q"), 27):
                 break
             if window_closed(WINDOW_CALIBRATE):
@@ -299,7 +393,7 @@ def run_calibration(args) -> int:
     finally:
         cap.release()
         tracker.close()
-        cv2.destroyAllWindows()
+        close_windows()
 
     if len(samples) < 15:
         print(f"Only {len(samples)} usable frames - not enough to calibrate. "
@@ -325,63 +419,155 @@ def run_calibration(args) -> int:
 
 
 # -------------------------------------------------------------------- live loop
+class PoseSession:
+    """Everything that belongs to one pose being practised.
+
+    Switching pose in the camera window builds a new one: its own hold timer,
+    cue engine, coach or step guide and practice log - and the camera, the
+    tracker and the voice carry straight on.
+    """
+
+    def __init__(self, key: str, args, hold: float | None = None, source_label: str = "webcam") -> None:
+        self.key = key
+        asana = asana_lib.get(key)
+        profile = calibration.load_profile(args.user)
+        if profile:
+            asana = calibration.apply_profile(asana, profile)
+            print(f"Using calibration profile '{args.user}' ({profile.get('n_samples')} frames)")
+        else:
+            print("No calibration profile found - using default tolerances "
+                  "(run with --calibrate to personalise them)")
+        if hold:
+            asana = replace(asana, hold_target_s=hold)
+        self.asana = asana
+
+        # The guided entry sequence is written for Vrikshasana specifically - it
+        # talks about shifting onto one foot and pressing the other into the inner
+        # thigh.  Reading that out over a Warrior or a Chair would be actively
+        # wrong, so for any other asana the app scores and corrects without
+        # pretending to know how to walk you in.  The hold timer, the rest window
+        # and the corrections all still apply.
+        self.guided = key == "vrikshasana"
+        self.no_coach = bool(args.no_coach) or not self.guided
+        if not self.guided and not args.no_coach:
+            from yoga import posespecs as _ps
+            how = ("a step-by-step walk-in and scoring" if _ps.STEPS.get(key) and not args.no_steps
+                   else "scoring mode")
+            print(f"note: {asana.sanskrit} runs with {how} (hold timer and corrections active); "
+                  f"the longer 12-stage coach is written for Vrikshasana")
+
+        self.sm = PoseStateMachine(hold_target_s=asana.hold_target_s,
+                                   enter_score=asana.enter_score, exit_score=asana.exit_score)
+        self.cues = CueEngine(state_cues=self.no_coach, phrase_fn=phrasing.spoken_phrase)
+        self.coach = Coach(hold_target_s=asana.hold_target_s)
+        self.smooth = RollingMean(window=5)
+        self.journey = (JOURNEY[:-2] + JOURNEY[-1:]) if self.guided else JOURNEY[-2:]
+        self.log = None if args.no_db else SessionLog(key, source=source_label)
+        self.banner = asana.setup_hint
+        self.banner_until = 0.0
+        self.last_line = asana.setup_hint          # what "say it again" repeats
+        self.done_at: float | None = None
+        self.frames = 0
+        self.started = time.perf_counter()
+        # What to show the person for a pose that has no drawn figure: its photo and
+        # the steps for getting into it (yoga/routines.py is the single source).
+        from yoga import routines as _routines
+        info = _routines.POSES.get(key)
+        self.guide_name = info.name if info else asana.name
+        self.guide_steps = info.steps if info else ()
+        self.guide_photo = cv2.imread(os.path.join(HERE, "assets", "gallery", key + ".jpg"))
+        self.step_guide = None
+        if not self.guided and not args.no_steps:
+            from yoga import posespecs
+            from yoga.guide import StepGuide
+            spec = posespecs.STEPS.get(key)
+            if spec:
+                self.step_guide = StepGuide(asana, spec)
+                self.guide_steps = tuple(s.text for s in self.step_guide.steps)
+
+    def announce(self) -> None:
+        print("")
+        print(f"{self.asana.sanskrit} ({self.asana.name}) - hold target {self.asana.hold_target_s:.0f}s, "
+              f"enter at {self.asana.enter_score:.0f}%")
+        print(f"{len(self.journey)} steps: " + " -> ".join(s.title for s in self.journey))
+        print(self.asana.setup_hint)
+
+    def reset(self) -> None:
+        self.sm = PoseStateMachine(hold_target_s=self.asana.hold_target_s,
+                                   enter_score=self.asana.enter_score, exit_score=self.asana.exit_score)
+        self.cues = CueEngine(state_cues=self.no_coach, phrase_fn=phrasing.spoken_phrase)
+        self.coach = Coach(hold_target_s=self.asana.hold_target_s)
+        self.smooth.reset()
+
+    def result(self) -> dict:
+        st = self.sm.stats
+        return {"key": self.key, "name": self.asana.name, "completed": st.completed,
+                "attempted": len(st.holds), "longest_s": round(st.longest_s, 1),
+                "best": round(st.best_score, 1)}
+
+    def finish(self) -> None:
+        elapsed = max(1e-3, time.perf_counter() - self.started)
+        if self.log:
+            self.log.finish(self.sm.stats, self.frames, self.frames / elapsed)
+
+
+class _Controls:
+    """Mouse state for the camera window: what is under the pointer, what was clicked."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.buttons: list = []
+        self.hover = None
+        self.click = None
+
+    def on_mouse(self, event, x, y, _flags, _param) -> None:
+        fx, fy = window_to_frame(self.name, x, y)
+        if event == cv2.EVENT_MOUSEMOVE:
+            self.hover = overlay_hit(self.buttons, fx, fy)
+        elif event == cv2.EVENT_LBUTTONDOWN:
+            self.click = overlay_hit(self.buttons, fx, fy)
+
+
+_NUMBER_KEYS = {ord(c): i for i, c in enumerate("1234567890")}
+
+
+def pose_menu_entries() -> list[tuple[str, str, str, str]]:
+    """``(key, name, sanskrit, tag)`` for every pose the trainer can score."""
+    from yoga import routines as _routines
+    out = []
+    for key, p in _routines.POSES.items():
+        if key in asana_lib.LIBRARY:
+            out.append((key, p.name, p.sanskrit, "full coach" if key == "vrikshasana" else "camera-scored"))
+    return out
+
+
 def run_live(args) -> int:
-    asana = asana_lib.get(args.asana)
-    profile = calibration.load_profile(args.user)
-    if profile:
-        asana = calibration.apply_profile(asana, profile)
-        print(f"Using calibration profile '{args.user}' "
-              f"({profile.get('n_samples')} frames)")
-    else:
-        print("No calibration profile found - using default tolerances "
-              "(run with --calibrate to personalise them)")
-    if args.hold:
-        asana = replace(asana, hold_target_s=args.hold)
-
-    # The guided entry sequence is written for Vrikshasana specifically - it
-    # talks about shifting onto one foot and pressing the other into the inner
-    # thigh.  Reading that out over a Warrior or a Chair would be actively
-    # wrong, so for any other asana the app scores and corrects without
-    # pretending to know how to walk you in.  The hold timer, the rest window
-    # and the corrections all still apply.
-    guided = asana.key == "vrikshasana"
-    if not guided and not args.no_coach:
-        args.no_coach = True
-        from yoga import posespecs as _ps
-        how = ("a step-by-step walk-in and scoring" if _ps.STEPS.get(asana.key)
-               and not args.no_steps else "scoring mode")
-        print(f"note: {asana.sanskrit} runs with {how} (hold timer and corrections active); "
-              f"the longer 12-stage coach is written for Vrikshasana")
-
     cap, live = open_source(args.source, args.width, args.height)
+    open_window(WINDOW, args.width, args.height)
+    ctl = _Controls(WINDOW)
+    cv2.setMouseCallback(WINDOW, ctl.on_mouse)
     tracker = PoseTracker(model=args.model)
-    sm = PoseStateMachine(hold_target_s=asana.hold_target_s,
-                          enter_score=asana.enter_score, exit_score=asana.exit_score)
-    cues = CueEngine(state_cues=args.no_coach, phrase_fn=phrasing.spoken_phrase)
-    coach = Coach(hold_target_s=asana.hold_target_s)
     speaker = Speaker(enabled=not args.no_voice)
-    smooth_score = RollingMean(window=5)
-    log = None if args.no_db else SessionLog(
-        asana.key, source=("webcam" if live else args.source))
+    label = "webcam" if live else args.source
+    ps = PoseSession(args.asana, args, hold=args.hold, source_label=label)
+    entries = pose_menu_entries()
+    keys = [e[0] for e in entries]
+    can_switch = not getattr(args, "lock_pose", False)
+    results: list[dict] = []
 
     writer = None
-    frames = 0
     fps = 30.0
     last_sample = -1.0
-    banner = asana.setup_hint
-    banner_until = 0.0
     t0 = time.perf_counter()
     prev = t0
     elapsed = 0.0
+    menu_open = demo_open = False
+    demo_t0 = 0.0
 
-    print("")
-    print(f"{asana.sanskrit} ({asana.name}) - hold target {asana.hold_target_s:.0f}s, "
-          f"enter at {asana.enter_score:.0f}%")
-    journey = (JOURNEY[:-2] + JOURNEY[-1:]) if guided else JOURNEY[-2:]
-    print(f"{len(journey)} steps: " + " -> ".join(s.title for s in journey))
-    print(asana.setup_hint)
+    ps.announce()
     print("To finish: press q or Esc with the video window focused, "
-          "or close the window.")
+          "or close the window.   Keys: n/b next/previous pose, l pose list, d demo, "
+          "v voice on/off, a say it again")
     print("")
 
     # Show the whole practice once before asking anyone to do it.  Quitting
@@ -389,14 +575,14 @@ def run_live(args) -> int:
     # inside the same try/finally as the live loop.
     try:
         if not args.no_intro:
-            if not run_intro(args, asana, speaker, journey=journey):
+            if not run_intro(args, ps.asana, speaker, journey=ps.journey):
                 cap.release()
                 tracker.close()
-                cv2.destroyAllWindows()
+                close_windows()
                 speaker.close()
-                if log:
-                    log.finish(sm.stats, 0, 0.0)
+                ps.finish()
                 print("quit during the walkthrough")
+                args.results, args.result = [], {"completed": 0, "attempted": 0, "longest_s": 0.0, "best": 0.0}
                 return 0
     except Exception as exc:                  # a broken intro must never block practice
         print(f"[intro] skipped ({exc})")
@@ -412,28 +598,31 @@ def run_live(args) -> int:
     # into the session it would read as "still speaking" and swallow the
     # opening cues.
     speaker.reset_timeline()
-    done_at = None
-    # What to show the person for a pose that has no drawn figure: its photo and
-    # the steps for getting into it (yoga/routines.py is the single source).
-    from yoga import routines as _routines
-    _info = _routines.POSES.get(asana.key)
-    guide_name = _info.name if _info else asana.name
-    guide_steps = _info.steps if _info else ()
-    guide_photo = cv2.imread(os.path.join(HERE, "assets", "gallery", asana.key + ".jpg"))
-    step_guide = None
-    if not guided and not args.no_steps:
-        from yoga import posespecs
-        from yoga.guide import StepGuide
-        _spec = posespecs.STEPS.get(asana.key)
-        if _spec:
-            step_guide = StepGuide(asana, _spec)
-            guide_steps = tuple(s.text for s in step_guide.steps)
+    ps.started = time.perf_counter()
+
+    def switch_to(new_key: str, now_t: float) -> None:
+        nonlocal ps, menu_open, demo_open
+        if new_key == ps.key or new_key not in keys:
+            return
+        results.append(ps.result())
+        ps.finish()
+        speaker.cancel()
+        ps = PoseSession(new_key, args, hold=None, source_label=label)
+        ps.started = time.perf_counter()
+        speaker.reset_timeline()
+        menu_open = False
+        line = f"{ps.guide_name}. {ps.asana.setup_hint}"
+        ps.banner, ps.banner_until, ps.last_line = line, now_t + BANNER_HOLD_S, line
+        if speaker.enabled:
+            speaker.say(line, now_t)
+        ps.announce()
 
     try:
         while True:
             ok, frame = cap.read()
             if not ok:
                 break
+            frame = fit_frame(frame, args.width, args.height)
             if live and not args.no_mirror:
                 frame = cv2.flip(frame, 1)
 
@@ -443,7 +632,8 @@ def run_live(args) -> int:
             if dt > 1e-4:
                 fps = 0.9 * fps + 0.1 * (1.0 / dt)
             t = now - t0
-            frames += 1
+            ps.frames += 1
+            asana, sm, cues, coach = ps.asana, ps.sm, ps.cues, ps.coach
 
             pose = tracker.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB),
                                    int(t * 1000), fps)
@@ -451,24 +641,24 @@ def run_live(args) -> int:
             ev = None
             if pose is not None:
                 ev = evaluate(asana, compute_features(pose))
-                score = smooth_score(ev.score) if ev.usable else 0.0
+                score = ps.smooth(ev.score) if ev.usable else 0.0
                 if ev.usable:
                     ev.score = score
                 state = sm.update(t, score, ev.usable)
             else:
-                smooth_score.reset()
+                ps.smooth.reset()
                 state = sm.update(t, 0.0, False)
 
             # The coach walks a beginner into the pose; once they are in it the
             # correction engine takes over.  Coach lines pre-empt corrections
             # so the two never talk over each other.
             said = None
-            if not args.no_coach:
+            if not ps.no_coach:
                 said = coach.update(t, ev, state, sm.elapsed,
                                     speaker_busy=speaker.busy(t))
                 if said is not None:
-                    banner = said.text
-                    banner_until = t + max(BANNER_HOLD_S, speaker.estimate_seconds(said.text))
+                    ps.banner = ps.last_line = said.text
+                    ps.banner_until = t + max(BANNER_HOLD_S, speaker.estimate_seconds(said.text))
                     # Never start a new line over one that is still being
                     # spoken - pyttsx3 has no notion of priority, so a second
                     # say() mid-sentence either garbles both or is silently
@@ -477,15 +667,16 @@ def run_live(args) -> int:
                     if not speaker.busy(t):
                         speaker.say(said.text, t)
                     print(f"[{t:6.1f}s] coach  {said.text}")
-                    if log:
-                        log.log_cue(t, "coach." + said.step_key, "guide", said.text)
+                    if ps.log:
+                        ps.log.log_cue(t, "coach." + said.step_key, "guide", said.text)
 
+            step_guide = ps.step_guide
             guide_active = step_guide is not None and not step_guide.finished
             if guide_active and ev is not None:
                 spoken = step_guide.update(t, ev)
                 if spoken:
-                    banner = spoken
-                    banner_until = t + max(BANNER_HOLD_S, speaker.estimate_seconds(spoken))
+                    ps.banner = ps.last_line = spoken
+                    ps.banner_until = t + max(BANNER_HOLD_S, speaker.estimate_seconds(spoken))
                     speaker.say(spoken, t)
                     print(f"[{t:6.1f}s] step   {spoken}")
             guide_active = step_guide is not None and not step_guide.finished
@@ -501,12 +692,12 @@ def run_live(args) -> int:
                 finishing = (state is State.HOLDING
                              and sm.hold_target_s - sm.elapsed <= QUIET_BEFORE_END_S)
                 coach_quiet = (not coach.resting and not finishing and not guide_active and (
-                    args.no_coach or (said is None and coach.finished)))
+                    ps.no_coach or (said is None and coach.finished)))
                 cue = (cues.update(t, ev, state, speaker_busy=speaker.busy(t))
                        if coach_quiet else None)
                 if cue is not None:
-                    banner = cue.text
-                    banner_until = t + max(BANNER_HOLD_S, speaker.estimate_seconds(cue.text))
+                    ps.banner = ps.last_line = cue.text
+                    ps.banner_until = t + max(BANNER_HOLD_S, speaker.estimate_seconds(cue.text))
                     if not speaker.busy(t):
                         speaker.say(cue.text, t)
                         cues.note_spoken(t, speaker.estimate_seconds(cue.text))
@@ -514,48 +705,50 @@ def run_live(args) -> int:
                     _chk = asana.check(cue.key)
                     if _chk is not None and _chk.alert and speaker.enabled:
                         play_alert()
-                    if log:
-                        log.log_cue(t, cue.key, cue.level, cue.text)
-                if log and ev.usable and t - last_sample >= 0.5:
+                    if ps.log:
+                        ps.log.log_cue(t, cue.key, cue.level, cue.text)
+                if ps.log and ev.usable and t - last_sample >= 0.5:
                     last_sample = t
-                    log.log_joints(t, ev.results)
+                    ps.log.log_joints(t, ev.results)
 
             # The banner is cue-driven, but a cue is deliberately rare - it has
             # to persist a second and clear a cooldown before it is spoken.
             # Without a fallback the last message just sits there, which is how
             # "no body detected" ended up printed over a body being scored.
-            if t >= banner_until:
-                banner = _idle_banner(ev, state, asana)
+            if t >= ps.banner_until:
+                ps.banner = _idle_banner(ev, state, asana)
 
             if sm.just_completed:
                 last = sm.stats.holds[-1]
                 print(f"[{t:6.1f}s] HOLD COMPLETE - {last.duration_s:.1f}s "
                       f"at {last.avg_score:.1f}% average")
-                if done_at is None:
-                    done_at = t
+                if ps.done_at is None:
+                    ps.done_at = t
 
             if pose is not None:
                 draw_skeleton(frame, pose, ev, show_raw=args.show_raw)
-            draw_hud(frame, ev, sm, banner, fps, hint=asana.setup_hint,
+            draw_hud(frame, ev, sm, ps.banner, fps, hint=asana.setup_hint,
                      right_margin=(0 if args.no_guide else 282), metric=args.metric)
 
+            clip = demo.clip(ps.key) if demo.available() else None
             if not args.no_guide:
                 draw_framing_panel(frame, ev.features.get("framing") if ev else None)
-                if guided:
+                if ps.guided:
                     # The practice stages map straight onto the panel; rest is
                     # the last entry.
-                    step_index = (len(journey) - 1 if coach.resting
+                    step_index = (len(ps.journey) - 1 if coach.resting
                                   else min(coach.index, len(SEQUENCE) - 1))
                 else:
                     # Scoring mode has only the two stages it actually runs.
                     step_index = 1 if coach.resting else 0
-                draw_step_panel(frame, journey, step_index)
+                draw_step_panel(frame, ps.journey, step_index)
                 if coach.resting:
                     draw_rest_panel(frame, coach.rest_remaining, coach.rest_target_s)
-                elif not guided:
-                    draw_pose_guide(frame, guide_photo, guide_name, asana.sanskrit, guide_steps,
+                elif not ps.guided:
+                    small = (clip.render(CARD_W - 28, DEMO_BOX_H, t, compact=True) if clip else None)
+                    draw_pose_guide(frame, ps.guide_photo, ps.guide_name, asana.sanskrit, ps.guide_steps,
                                     current=(step_guide.index if step_guide else None),
-                                    done=bool(step_guide and step_guide.finished))
+                                    done=bool(step_guide and step_guide.finished), demo_img=small)
                 else:
                     # While holding, cycle the card between the two accepted
                     # arm forms so the practitioner can see both are allowed.
@@ -570,6 +763,19 @@ def run_live(args) -> int:
                                         confirm_fraction=coach.confirm_fraction,
                                         step_seconds=coach.step_seconds)
 
+            # ---- the controls: pose chooser, voice, demo
+            buttons: list = []
+            if demo_open and clip is not None:
+                dt_demo = t - demo_t0
+                buttons += draw_demo_panel(frame, clip, dt_demo, ps.guide_steps[clip.step(dt_demo)]
+                                           if ps.guide_steps else "", f"DEMO  {asana.sanskrit.upper()}",
+                                           ctl.hover)
+            buttons += draw_toolbar(frame, f"{ps.guide_name}  ({asana.sanskrit})", can_switch,
+                                    speaker.enabled, demo_open, ctl.hover)
+            if menu_open:
+                buttons = draw_pose_menu(frame, entries, ps.key, ctl.hover)
+            ctl.buttons = buttons
+
             if args.record:
                 if writer is None:
                     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
@@ -577,18 +783,67 @@ def run_live(args) -> int:
                                              (frame.shape[1], frame.shape[0]))
                 writer.write(frame)
 
-            cv2.imshow(WINDOW, frame)
+            show(WINDOW, frame)
             key = cv2.waitKey(1) & 0xFF
-            if key in (ord("q"), 27):                 # q or Esc
-                break
             if window_closed(WINDOW):
                 break
-            if (getattr(args, "stop_after_hold", False) and done_at is not None
-                    and t - done_at > 3.0):           # let "well held" register
+
+            # ---- what was asked for, by key or by click
+            action = ctl.click
+            ctl.click = None
+            if key in (ord("q"), 27):
+                if key == 27 and (menu_open or demo_open):
+                    menu_open = demo_open = False             # Esc first closes what is open
+                else:
+                    break
+            elif key == ord("v"):
+                action = "voice"
+            elif key == ord("a"):
+                action = "again"
+            elif key == ord("d"):
+                action = "close_demo" if demo_open else "demo"
+            elif key == ord("l"):
+                action = "close_menu" if menu_open else "menu"
+            elif key == ord("n"):
+                action = "next"
+            elif key == ord("b"):
+                action = "prev"
+            elif key in _NUMBER_KEYS and menu_open and _NUMBER_KEYS[key] < len(keys):
+                action = "pose:" + keys[_NUMBER_KEYS[key]]
+            elif key in _NUMBER_KEYS and can_switch and _NUMBER_KEYS[key] < len(keys):
+                action = "pose:" + keys[_NUMBER_KEYS[key]]
+
+            if action == "voice":
+                on = speaker.set_enabled(not speaker.enabled)
+                print("voice " + ("on" if on else "off"))
+                if on:
+                    speaker.say("Voice on. " + ps.last_line, t)
+            elif action == "again":
+                if speaker.enabled and ps.last_line:
+                    speaker.cancel()
+                    speaker.reset_timeline()
+                    speaker.say(ps.last_line, t)
+                elif not speaker.enabled:
+                    print("voice is off - press v to turn it on")
+            elif action == "demo" and clip is not None:
+                demo_open, demo_t0, menu_open = True, t, False
+            elif action == "close_demo":
+                demo_open = False
+            elif action == "menu" and can_switch:
+                menu_open, demo_open = True, False
+            elif action == "close_menu":
+                menu_open = False
+            elif action in ("next", "prev") and can_switch:
+                step = 1 if action == "next" else -1
+                switch_to(keys[(keys.index(ps.key) + step) % len(keys)], t)
+            elif action and action.startswith("pose:") and can_switch:
+                switch_to(action[5:], t)
+            elif action == "pose_locked":
+                print("this session is locked to one pose (started from a routine)")
+
+            if (getattr(args, "stop_after_hold", False) and ps.done_at is not None
+                    and t - ps.done_at > 3.0):                # let "well held" register
                 break
-            if key == ord("v"):
-                speaker.enabled = not speaker.enabled
-                print("voice " + ("on" if speaker.enabled else "off"))
             if key == ord("g"):
                 args.no_guide = not args.no_guide
                 print("guide " + ("off" if args.no_guide else "on"))
@@ -596,12 +851,7 @@ def run_live(args) -> int:
                 args.metric = not args.metric
                 print("joint table: " + ("raw numbers" if args.metric else "words"))
             if key == ord("r"):
-                sm = PoseStateMachine(hold_target_s=asana.hold_target_s,
-                                      enter_score=asana.enter_score,
-                                      exit_score=asana.exit_score)
-                cues = CueEngine(state_cues=args.no_coach, phrase_fn=phrasing.spoken_phrase)
-                coach = Coach(hold_target_s=asana.hold_target_s)
-                smooth_score.reset()
+                ps.reset()
                 print("session reset")
             if key == ord("s"):
                 snapdir = os.path.join(HERE, "data", "snapshots")
@@ -618,29 +868,30 @@ def run_live(args) -> int:
         if writer is not None:
             writer.release()
         tracker.close()
-        cv2.destroyAllWindows()
+        close_windows()
         elapsed = max(1e-3, time.perf_counter() - t0)
-        if log:
-            log.finish(sm.stats, frames, frames / elapsed)
+        ps.finish()
         speaker.close()
 
-    st = sm.stats
-    print("")
-    print("---------------- session summary ----------------")
-    print(f"asana              : {asana.sanskrit} ({asana.name})")
-    print(f"duration           : {elapsed:.1f}s over {frames} frames "
-          f"({frames / elapsed:.1f} fps)")
-    print(f"holds attempted    : {len(st.holds)}")
-    print(f"holds completed    : {st.completed}")
-    print(f"longest hold       : {st.longest_s:.1f}s")
-    print(f"total time in pose : {st.total_hold_s:.1f}s")
-    print(f"best alignment     : {st.best_score:.1f}%")
-    if log:
-        print(f"session logged to  : {log.path} (session id {log.session_id})")
+    results.append(ps.result())
+    for r in results:
+        print("")
+        print("---------------- session summary ----------------")
+        print(f"asana              : {r['name']}")
+        print(f"holds attempted    : {r['attempted']}")
+        print(f"holds completed    : {r['completed']}")
+        print(f"longest hold       : {r['longest_s']:.1f}s")
+        print(f"best alignment     : {r['best']:.1f}%")
+    print(f"duration           : {elapsed:.1f}s over {sum(1 for _ in results)} pose(s)")
+    if ps.log:
+        print(f"session logged to  : {ps.log.path} (session id {ps.log.session_id})")
     print("-------------------------------------------------")
-    # Read by the routine launcher, which runs several poses in one process.
-    args.result = {"completed": st.completed, "attempted": len(st.holds),
-                   "longest_s": round(st.longest_s, 1), "best": round(st.best_score, 1)}
+    # Read by the routine launcher, which runs several poses in one process:
+    # `result` is for the pose it asked for, `results` for every pose practised.
+    asked = next((r for r in results if r["key"] == args.asana), None)
+    pick = asked or {"completed": 0, "attempted": 0, "longest_s": 0.0, "best": 0.0}
+    args.result = {k: pick[k] for k in ("completed", "attempted", "longest_s", "best")}
+    args.results = results
     return 0
 
 
@@ -662,7 +913,7 @@ def run_demo(args) -> int:
     finally:
         if writer is not None:
             writer.release()
-        cv2.destroyAllWindows()
+        close_windows()
         speaker.close()
     print("\nwalkthrough finished")
     return 0

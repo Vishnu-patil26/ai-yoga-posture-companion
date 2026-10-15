@@ -573,6 +573,106 @@ def test_speech_pacing() -> None:
     check("every queued line reaches the speaking backend, not just the first",
           spoken == ["first line", "second line", "third line"], str(spoken))
 
+    # Stopping must stop.  close() used to put its stop marker BEHIND the lines
+    # still waiting and join for two seconds, so after the window was closed the
+    # voice carried on through everything queued.  cancel() empties the queue and
+    # cuts the playing line at its next word.
+    class _FakeEngine:
+        """Just enough of pyttsx3's non-blocking loop: one word per iterate()."""
+
+        def __init__(self):
+            self.handlers, self.words, self.stopped, self.text = {}, [], False, ""
+            self.between = None            # a hook run before each word, for the test
+
+        def setProperty(self, *_a):
+            pass
+
+        def connect(self, name, fn):
+            self.handlers[name] = fn
+
+        def say(self, text):
+            self.text = text
+
+        def startLoop(self, _block=True):
+            pass
+
+        def endLoop(self):
+            pass
+
+        def iterate(self):
+            parts = self.text.split()
+            i = len(self.words)
+            if self.stopped or i >= len(parts):
+                return
+            if self.between:
+                self.between(i)
+            self.words.append(parts[i])
+            if len(self.words) == len(parts) and "finished-utterance" in self.handlers:
+                self.handlers["finished-utterance"]("u", True)
+
+        def stop(self):
+            self.stopped = True
+
+    class _FakePyttsx3:
+        engines: list = []
+
+        @staticmethod
+        def init():
+            e = _FakeEngine()
+            _FakePyttsx3.engines.append(e)
+            return e
+
+    # a line that is left alone runs to its end
+    full = Speaker(enabled=False)
+    full._line_gen = full._gen
+    full._speak_once(_FakePyttsx3, "one two three", 165, 1.0)
+    check("an uninterrupted line is spoken in full",
+          _FakePyttsx3.engines[-1].words == ["one", "two", "three"], str(_FakePyttsx3.engines[-1].words))
+
+    # the voice can be switched off and on again, even if the speaker started silent
+    class _NoWorker(Speaker):
+        def _run(self, rate, volume):             # the real worker would open an audio device
+            self.worker_started = True
+
+    nw = _NoWorker(enabled=False)
+    check("a silent speaker has no worker", nw._thread is None)
+    nw._q.put_nowait("a waiting line")
+    check(nw.set_enabled(True) is True and nw.enabled and nw._thread is not None,
+          "set_enabled(True) starts the worker of a speaker created silent")
+    nw._thread.join(timeout=2)
+    nw._q.put_nowait("another")
+    check(nw.set_enabled(False) is False and not nw.enabled and nw._q.empty(),
+          "set_enabled(False) silences at once and drops what was queued")
+
+    ks = Speaker(enabled=False)
+    ks._q = _queue.Queue(maxsize=10)
+    ks.enabled = True
+    ks._q.put("one two three four five")
+    ks._q.put("a second waiting line")
+    ks._line_gen = ks._gen
+    # run the first line, cancelling after its second word
+    eng_box: list = []
+    real_init = _FakePyttsx3.init
+
+    def _init_with_hook():
+        e = real_init()
+        e.between = lambda i: ks.cancel() if i == 2 else None
+        eng_box.append(e)
+        return e
+
+    _FakePyttsx3.init = staticmethod(_init_with_hook)
+    ks._speak_once(_FakePyttsx3, ks._q.get(), 165, 1.0)
+    check("cancel() cuts the line that is playing, within a word or two",
+          eng_box[0].stopped and "four" not in eng_box[0].words and len(eng_box[0].words) <= 3,
+          str(eng_box[0].words))
+    check("cancel() throws away the lines still waiting", ks._q.empty())
+    ks.say("fresh line after the cancel")
+    check("the speaker still works after a cancel", ks._q.qsize() == 1)
+    ks._q.put("x")
+    ks._thread = None
+    ks.close()
+    check("close() leaves nothing queued to be spoken", ks._q.empty() or ks._q.get_nowait() is None)
+
 
 def test_journey_steps() -> None:
     print("\n10. the seven-step journey - one source of truth for UI and demo")

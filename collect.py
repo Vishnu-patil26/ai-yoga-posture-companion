@@ -35,11 +35,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 from yoga import collection as col                                # noqa: E402
+from yoga import theme, ui                                        # noqa: E402
+from yoga.draw import Pen                                         # noqa: E402
+from yoga.theme import TOKENS as T                                # noqa: E402
 from yoga.landmarks import CONNECTIONS, CORE_LANDMARKS, Pose, PoseTracker  # noqa: E402
 from yoga.routines import POSES                                   # noqa: E402
 
-BG, FG, ACCENT, MUTED = "#f7f5ef", "#23302a", "#2f7d5b", "#6b7a72"
-BAD = "#b3402f"
+BG, FG, ACCENT, MUTED = T["bg"], T["text"], T["accent"], T["muted"]
+GOOD, BAD = T["good"], T["bad"]
 STEPS = ("1  Consent", "2  Details", "3  Capture", "4  Summary")
 
 WINDOW = "Collect"
@@ -74,15 +77,8 @@ class Shot:
     pose: Pose | None          #: None when no body was found
 
 
-FONT = cv2.FONT_HERSHEY_SIMPLEX
-ACCENT_BGR = (91, 125, 47)
-
-
-def _text(img: np.ndarray, text: str, org: tuple[int, int], scale: float,
-          colour: tuple[int, int, int], thick: int = 2) -> None:
-    """Text with a dark outline so it reads on any background."""
-    cv2.putText(img, text, org, FONT, scale, (0, 0, 0), thick + 3, cv2.LINE_AA)
-    cv2.putText(img, text, org, FONT, scale, colour, thick, cv2.LINE_AA)
+ACCENT_BGR = theme.bgr(T["accent"])
+OK_BGR, BAD_BGR = theme.bgr(T["good"]), theme.bgr(T["bad"])
 
 
 def joints_outside(pose: Pose) -> list[int]:
@@ -131,14 +127,17 @@ def render_preview(frame: np.ndarray, *, caption: str, big: str = "", pose: Pose
     h, w = disp.shape[:2]
     if pose is not None:
         _draw_skeleton(disp, pose, mirror)
-    cv2.rectangle(disp, (0, 0), (w, 46), (35, 35, 35), -1)
-    _text(disp, caption, (14, 32), 0.8, (255, 255, 255))
-    if big:                                   # in the corner, so it never hides the body
-        (tw, th), _ = cv2.getTextSize(big, FONT, 4.0, 9)
-        _text(disp, big, (w - tw - 30, 60 + th), 4.0, (255, 255, 255), 9)
     note, ok = coverage_note(pose)
-    _text(disp, note, (14, h - 20), 0.7, (80, 200, 80) if ok else (60, 60, 235))
-    _text(disp, "Esc = cancel", (max(14, w - 170), h - 20), 0.6, (230, 230, 230), 1)
+    cv2.rectangle(disp, (0, 0), (w, 48), theme.bgr(T["bg"]), -1)           # black bars, hairline edge
+    cv2.line(disp, (0, 48), (w, 48), theme.bgr(T["border2"]), 1)
+    cv2.rectangle(disp, (0, h - 44), (w, h), theme.bgr(T["bg"]), -1)
+    cv2.line(disp, (0, h - 44), (w, h - 44), theme.bgr(T["border2"]), 1)
+    with Pen(disp) as pen:
+        pen.text((16, 32), caption, 20, theme.bgr(T["text"]), "sans", True)
+        if big:                               # in the corner, so it never hides the body
+            pen.text((w - 36, 200), big, 150, theme.bgr(T["text"]), "sans", True, "r")
+        pen.text((16, h - 16), note, 15, OK_BGR if ok else BAD_BGR, "mono")
+        pen.text((w - 16, h - 16), "ESC  CANCEL", 11, theme.bgr(T["muted"]), "mono", False, "r", 1.6)
     if flash:
         cv2.addWeighted(np.full_like(disp, 255), 0.5, disp, 0.5, 0, disp)
     return disp
@@ -195,22 +194,14 @@ def grab_burst(cap, tracker, *, n: int = BURST_N, countdown_s: float = COUNTDOWN
 # ------------------------------------------------------------------ the window
 class App(tk.Tk):
     def __init__(self) -> None:
+        ui.init_dpi()
         super().__init__()
+        ui.setup(self)
         self.title("AI Yoga Companion - volunteer photo collection")
-        self.geometry("980x720")
-        self.minsize(900, 660)
-        self.configure(bg=BG)
-        st = ttk.Style(self)
-        st.theme_use("clam")
-        st.configure(".", background=BG, foreground=FG, font=("Segoe UI", 10))
-        st.configure("Title.TLabel", font=("Segoe UI", 20, "bold"))
-        st.configure("Sub.TLabel", foreground=MUTED)
-        st.configure("Big.TLabel", font=("Segoe UI", 54, "bold"), foreground=ACCENT)
-        st.configure("Accent.TButton", background=ACCENT, foreground="white",
-                     font=("Segoe UI", 11, "bold"), padding=8)
-        st.map("Accent.TButton", background=[("active", "#256a4c"), ("disabled", "#b9c4be")])
-        st.configure("Card.TLabelframe", background=BG)
-        st.configure("Treeview", rowheight=24)
+        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+        w, h = min(ui.px(1040), sw - 60), min(ui.px(780), sh - 90)
+        self.geometry(f"{w}x{h}+{max(0, (sw - w) // 2)}+{max(0, (sh - h) // 3)}")
+        self.minsize(min(ui.px(900), w), min(ui.px(660), h))
 
         self.volunteer: col.Volunteer | None = None
         self.screen = ""
@@ -237,9 +228,9 @@ class App(tk.Tk):
                              for i, (k, p) in enumerate(POSES.items(), 1)}
 
         self.header = ttk.Frame(self)
-        self.header.pack(fill="x", padx=24, pady=(14, 0))
+        self.header.pack(fill="x", padx=ui.px(32), pady=(ui.px(22), 0))
         self.body = ttk.Frame(self)
-        self.body.pack(fill="both", expand=True, padx=24, pady=10)
+        self.body.pack(fill="both", expand=True, padx=ui.px(32), pady=ui.px(14))
         self.protocol("WM_DELETE_WINDOW", self.quit_app)
         self.show_consent()
 
@@ -252,13 +243,13 @@ class App(tk.Tk):
         bar = ttk.Frame(self.header)
         bar.pack(fill="x")
         for i, s in enumerate(STEPS):
-            ttk.Label(bar, text=s, foreground=ACCENT if i == step else MUTED,
-                      font=("Segoe UI", 10, "bold" if i == step else "normal")
-                      ).pack(side="left", padx=(0, 22))
-        ttk.Label(self.header, text=title, style="Title.TLabel").pack(anchor="w", pady=(8, 0))
+            ui.label(bar, s, "cap_text" if i == step else "cap").pack(side="left", padx=(0, ui.px(22)))
+        # ttk labels, not tk: the tests (and the id-in-header check) look for them
+        ttk.Label(self.header, text=title, font=ui.F["h1"]).pack(anchor="w", pady=(ui.px(10), 0))
+        ui.Hairline(self.header).pack(anchor="w", pady=(ui.px(10), ui.px(8)))
         if sub:
-            ttk.Label(self.header, text=sub, style="Sub.TLabel", wraplength=900,
-                      justify="left").pack(anchor="w")
+            ttk.Label(self.header, text=sub, style="Sub.TLabel", font=ui.F["mono"],
+                      wraplength=ui.px(900), justify="left").pack(anchor="w")
         return self.body
 
     # Dialogs go through these so a test can replace them (a modal box would
@@ -277,7 +268,7 @@ class App(tk.Tk):
         lbl = getattr(self, "status_lbl", None)
         try:
             if lbl is not None and lbl.winfo_exists():
-                lbl.configure(text=text, foreground=MUTED if ok is None else ACCENT if ok else BAD)
+                lbl.configure(text=text, foreground=MUTED if ok is None else GOOD if ok else BAD)
         except tk.TclError:
             pass
 
@@ -332,13 +323,12 @@ class App(tk.Tk):
                                                                          pady=(10, 2))
         box = ttk.Frame(b)
         box.pack(fill="both", expand=True)
-        txt = tk.Text(box, wrap="word", bg="white", relief="flat", font=("Segoe UI", 10),
-                      padx=12, pady=8, height=6)
+        txt = ui.textbox(box, height=6)
         sb = ttk.Scrollbar(box, command=txt.yview)
         txt.configure(yscrollcommand=sb.set)
         sb.pack(side="right", fill="y")
         txt.pack(side="left", fill="both", expand=True)
-        txt.tag_configure("h", font=("Segoe UI", 10, "bold"), foreground=ACCENT)
+        txt.tag_configure("h", font=ui.F["bold"], foreground=T["accent"])
         for line in col.CONSENT_TEXT.splitlines():
             heading = bool(line) and line[0].isalpha() and line.split("(")[0].strip().isupper()
             txt.insert("end", line + "\n", "h" if heading else ())
@@ -417,12 +407,14 @@ class App(tk.Tk):
         vol = self.volunteer
         b = self._screen("id", 1, "Your volunteer ID",
                          "This ID, and nothing else, links you to your data.")
-        ttk.Label(b, text=vol.volunteer_id, style="Big.TLabel").pack(pady=(30, 6))
+        ttk.Label(b, text=vol.volunteer_id, style="Big.TLabel", font=ui.F["big"]).pack(
+            pady=(ui.px(30), ui.px(6)))
         ttk.Label(b, text="Write this ID down or take a photo of this screen.\n"
                           "To withdraw later, give this ID to the project supervisor: "
                           "all your photos, points and details are then deleted.\n"
                           "Without the ID we cannot find your data.",
-                  font=("Segoe UI", 12), justify="center", wraplength=800).pack(pady=10)
+                  foreground=MUTED, font=ui.F["body"], justify="center",
+                  wraplength=ui.px(800)).pack(pady=ui.px(10))
         bar = ttk.Frame(b)
         bar.pack(pady=24)
         ttk.Button(bar, text="Copy ID", command=lambda: self._copy(vol.volunteer_id)).pack(
@@ -486,10 +478,10 @@ class App(tk.Tk):
         ttk.Entry(cam, textvariable=self.camera, width=16).pack(side="left", padx=8)
 
         self.status_lbl = ttk.Label(left, text="", wraplength=520, justify="left",
-                                    font=("Segoe UI", 11, "bold"))
+                                    font=ui.F["h3"])
         self.status_lbl.pack(anchor="w", pady=10)
 
-        ttk.Label(right, text="Your photos so far", font=("Segoe UI", 10, "bold")).pack(anchor="w")
+        ttk.Label(right, text="Your photos so far", font=ui.F["bold"]).pack(anchor="w")
         self.counts = ttk.Treeview(right, columns=("pose", "right", "wrong"), show="headings",
                                    height=len(POSES))
         for c, w, anchor in (("pose", 150, "w"), ("right", 58, "center"), ("wrong", 58, "center")):
@@ -574,7 +566,8 @@ class App(tk.Tk):
         import app as trainer
 
         def show(image: np.ndarray) -> bool:
-            cv2.imshow(WINDOW, image)
+            trainer.open_window(WINDOW, image.shape[1], image.shape[0])
+            trainer.show(WINDOW, image)
             key = cv2.waitKey(1) & 0xFF
             return key not in (27, ord("q")) and not trainer.window_closed(WINDOW)
         return show
@@ -588,7 +581,8 @@ class App(tk.Tk):
         finally:
             cap.release()
             try:
-                cv2.destroyWindow(WINDOW)
+                import app as trainer
+                trainer.close_windows()                   # also forgets the window, so the next one is rebuilt
             except cv2.error:
                 pass
 
@@ -649,8 +643,8 @@ class App(tk.Tk):
                          "where the sample is still thin.")
         box = ttk.Frame(b)
         box.pack(fill="both", expand=True)
-        txt = tk.Text(box, wrap="none", bg="white", relief="flat", font=("Consolas", 10),
-                      padx=12, pady=8)
+        txt = ui.textbox(box, height=10)
+        txt.configure(wrap="none", font=ui.F["mono"])
         sb = ttk.Scrollbar(box, command=txt.yview)
         txt.configure(yscrollcommand=sb.set)
         sb.pack(side="right", fill="y")

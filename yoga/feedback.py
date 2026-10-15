@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import queue
 import threading
+import time
 from dataclasses import dataclass
 
 from .evaluator import CheckResult, Evaluation
@@ -214,6 +215,7 @@ class Speaker:
         self.enabled = enabled
         self.available = False
         self.rate = rate
+        self._volume = volume
         self.free_at = 0.0
         self._warned = False
         #: Depth 2: one line playing, one waiting.  Depth 1 meant anything
@@ -224,9 +226,29 @@ class Speaker:
         #: than 2 would just build a backlog of stale coaching.
         self._q: queue.Queue[str | None] = queue.Queue(maxsize=2)
         self._thread: threading.Thread | None = None
+        #: Bumped by cancel().  The worker notes the number when it takes a line
+        #: and cuts that line off at the next word if the number has moved on, so
+        #: "stop" means stop within a word, not "after this sentence and the next".
+        self._gen = 0
+        self._line_gen = 0
         if enabled:
             self._thread = threading.Thread(target=self._run, args=(rate, volume), daemon=True)
             self._thread.start()
+
+    def set_enabled(self, on: bool) -> bool:
+        """Switch the voice on or off for good measure: off silences it at once (what
+        is playing is cut, what is queued is dropped); on starts the worker if this
+        speaker was created silent.  Returns whether it is now on."""
+        if not on:
+            self.enabled = False
+            self.cancel()
+            return False
+        self.enabled = True
+        if self._thread is None or not self._thread.is_alive():
+            self._q = queue.Queue(maxsize=2)
+            self._thread = threading.Thread(target=self._run, args=(self.rate, self._volume), daemon=True)
+            self._thread.start()
+        return self.enabled
 
     def estimate_seconds(self, text: str) -> float:
         return estimate_speech_seconds(text, self.rate)
@@ -262,14 +284,29 @@ class Speaker:
             start = max(t, self.free_at)
             self.free_at = start + self.estimate_seconds(text)
 
+    def cancel(self) -> None:
+        """Stop talking now: forget everything queued and cut the line that is
+        playing short (at the next word).  The speaker stays usable afterwards."""
+        self._gen += 1
+        try:
+            while True:
+                self._q.get_nowait()
+        except queue.Empty:
+            pass
+        self.free_at = 0.0
+
     def close(self) -> None:
+        """Silence the voice and end the worker.  Returns quickly: it used to
+        queue a stop marker *behind* the lines still waiting, so the voice carried
+        on for several seconds after the window was closed."""
+        self.cancel()
         if self._thread is None:
             return
         try:
             self._q.put_nowait(None)
         except queue.Full:
             pass
-        self._thread.join(timeout=2.0)
+        self._thread.join(timeout=0.3)    # the voice is already silent; do not hold the window up
 
     def _run(self, rate: int, volume: float) -> None:
         try:
@@ -281,6 +318,7 @@ class Speaker:
         self.available = True
         while True:
             text = self._q.get()
+            self._line_gen = self._gen                 # read straight away: see cancel()
             if text is None:
                 break
             self._speak_once(pyttsx3, text, rate, volume)
@@ -300,12 +338,40 @@ class Speaker:
         the render loop entirely.
         """
         engine = None
+        gen = self._line_gen
+        settled = False                                # finished or already stopped: nothing left to stop
         try:
             engine = pyttsx3.init()
             engine.setProperty("rate", rate)
             engine.setProperty("volume", volume)
+            if self._gen != gen:                       # cancelled before it started
+                return
+            finished = threading.Event()
+            engine.connect("finished-utterance", lambda *_a: finished.set())
             engine.say(text)
-            engine.runAndWait()
+            # runAndWait() cannot be interrupted from outside (and the SAPI5 driver
+            # never reports word events to cut it at), so the line is run with
+            # pyttsx3's non-blocking loop and this thread looks up every 20 ms to see
+            # whether cancel() has been called.  Measured: a line is silent 0.16 s
+            # after stop().
+            engine.startLoop(False)
+            try:
+                limit = max(8.0, self.estimate_seconds(text) * 3.0 + 5.0)   # never hang the worker
+                waited = 0.0
+                while not finished.is_set() and waited < limit:
+                    engine.iterate()
+                    if self._gen != gen:
+                        engine.stop()
+                        settled = True
+                        break
+                    time.sleep(0.02)
+                    waited += 0.02
+                settled = settled or finished.is_set()
+            finally:
+                try:
+                    engine.endLoop()
+                except Exception:
+                    pass
         except Exception as exc:
             # Report once rather than silently swallowing every failure - a
             # blanket `except: pass` here is what hid the bug above.
@@ -314,7 +380,9 @@ class Speaker:
                 print(f"[voice] could not speak ({type(exc).__name__}: {exc}); "
                       "cues will continue on screen")
         finally:
-            if engine is not None:
+            # A second stop() on the SAPI5 driver, after the line is already over or
+            # already stopped, blocks the worker - so only stop what is still going.
+            if engine is not None and not settled:
                 try:
                     engine.stop()
                 except Exception:

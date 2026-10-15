@@ -31,8 +31,9 @@ from yoga.evaluator import compute_features, evaluate             # noqa: E402
 from yoga.feedback import CueEngine                               # noqa: E402
 from yoga.guide import StepGuide                                  # noqa: E402
 from yoga.landmarks import PoseTracker                            # noqa: E402
-from yoga.overlay import (draw_framing_panel, draw_hud, draw_pose_guide,   # noqa: E402
-                          draw_skeleton, draw_step_panel)
+from yoga import demo                                              # noqa: E402
+from yoga.overlay import (CARD_W, DEMO_BOX_H, draw_framing_panel, draw_hud,  # noqa: E402
+                          draw_pose_guide, draw_skeleton, draw_step_panel, draw_toolbar)
 from yoga.state_machine import PoseStateMachine, State           # noqa: E402
 
 W, H, DT, SECONDS = 1280, 720, 0.1, 30.0
@@ -90,9 +91,12 @@ def check_pose(tracker, key: str, out_dir: str) -> dict:
     draw_framing_panel(frame, ev.features.get("framing"))
     draw_step_panel(frame, JOURNEY[-2:], 0)       # what the app shows for a non-Tree pose
     info = routines.POSES[key]
+    clip = demo.clip(key) if demo.available() else None
     draw_pose_guide(frame, canvas_from(photo)[:, :], info.name, info.sanskrit,
                     tuple(s.text for s in guide.steps) if guide else info.steps,
-                    current=guide.index if guide else None, done=bool(guide and guide.finished))
+                    current=guide.index if guide else None, done=bool(guide and guide.finished),
+                    demo_img=clip.render(CARD_W - 28, DEMO_BOX_H, 4.5, compact=True) if clip else None)
+    draw_toolbar(frame, f"{info.name}  ({info.sanskrit})", True, True, False)
     cv2.imwrite(os.path.join(out_dir, key + ".png"), frame)
     row.update(usable=ev.usable, score=round(ev.score, 1), variant=ev.variant_name or "-",
                reason=ev.reason, fails=[(r.check.key, r.check.cue_for(r.deviation))
