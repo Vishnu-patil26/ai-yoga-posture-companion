@@ -13,7 +13,9 @@ Utkatasana, Adho Mukha Svanasana, Bhujangasana, Marjaryasana-Bitilasana, Balasan
 Sukhasana (fitted from public photographs). Every pose has a guided walk-in; Tree has the
 longest.
 
-![The trainer holding a pose](docs/images/ui-02-holding.png)
+![The live camera view: Tree pose, hold complete](docs/images/hud-vrikshasana.png)
+
+*The camera view in the project's black theme (a reference photograph run through the same pipeline the webcam feeds). Green = correct, red = fix this, dashed amber = cannot see.*
 
 ```
 webcam ──▶ BlazePose (33 landmarks) ──▶ joint angles ──▶ compare with the
@@ -94,6 +96,32 @@ window. Other keys: `v` voice · `g` guide panels · `r` reset · `s` snapshot.
 
 ---
 
+## Run it on another laptop (one click)
+
+Windows 10/11 with a webcam and internet for the first run.
+
+1. Get the project - either of these:
+   * **Small download (about 25 MB, recommended):** the `AI-Yoga-Companion-portable.zip` on the
+     [Releases page](https://github.com/Vishnu-patil26/ai-yoga-posture-companion/releases/latest).
+   * **Whole repository (about 215 MB, includes the training photographs):** *Code > Download ZIP*,
+     or `git clone https://github.com/Vishnu-patil26/ai-yoga-posture-companion.git`.
+2. Unzip, then **double-click `START_HERE.bat`**.
+
+The first run finds Python 3.9-3.12 - or installs Python 3.11 for the current user, no
+administrator needed - builds a private environment, installs the libraries, fetches the pose
+model if it is not already there, runs the engine self-test and opens the app. It takes about
+5-10 minutes. Every later run opens the app in a few seconds. It never touches other Python
+projects on the laptop. Safe to re-run: if something fails (no internet, a blocked download) it
+says why and carries on from where it stopped next time.
+
+`START_HERE.bat setup-only` installs and verifies without opening the app;
+`START_HERE.bat trainer` opens the camera trainer directly. If the camera is blocked:
+*Settings > Privacy & security > Camera > Let desktop apps access your camera*.
+The portable zip is rebuilt with `python tools/package_portable.py`; it leaves out
+`data/datasets` and `data/landmarks`, which are only needed to refit the poses.
+
+---
+
 ## The launcher: profile, routine, plan, practice
 
 ```bash
@@ -101,12 +129,18 @@ python bootstrap.py --ui      # or launch.bat
 ```
 
 1. **Profile** - diet plan, age, weight, height, bust/shoulder, waist, hip,
-   diabetic, blood pressure, standing or sitting job, location. Stored on this
-   machine only (`data/users/`).
+   diabetic, blood pressure, medication or conditions (free text, read by `yoga/nlp.py`),
+   standing or sitting job, location. Stored on this machine only (`data/users/`);
+   the first save issues a short ID (`YC-7F3A9C`). Mistakes are explained on the
+   screen, with the offending field outlined, never in a pop-up.
 2. **Routine** - pick by *lifestyle* (desk/sitting, standing workers, homemakers,
    students, lumbar care), by *goal* (daily energy, back pain, stress relief) or
    by *body position* (standing, sitting, lying/floor). The one matching your job
-   is pre-selected.
+   is pre-selected. Or **ask the coach** in your own words ("my lower back hurts and
+   I only have 10 minutes") and it picks a routine and says why
+   (`yoga/nlp.py`). The **pose library** shows every pose with its photo, credit and
+   category (tick poses in the order you want), and a **hierarchy** tab shows body
+   position > category > pose > body points.
 3. **Plan** - the routine after your profile is applied: holds shortened for age,
    BP, diabetes or BMI, head-below-heart poses skipped for high BP / 60+, cautions
    and diet notes. The rules only ever make a routine gentler.
@@ -125,8 +159,48 @@ python bootstrap.py --ui      # or launch.bat
    `tools/fitting/calibrate_thresholds.py`, `tools/evaluation/library_eval.py`, `tools/evaluation/external_check.py`,
    `tools/evaluation/pose_check.py` (every pose end to end, no camera).
 
-Checks: `python bootstrap.py --flow` (55 offline checks for routines, profile
-rules and the launcher screens).
+Checks: `python bootstrap.py --flow` (250 offline checks for routines, profile
+rules, the launcher screens, the drawing helpers, the HUD layout, the demo clips and
+the camera-window controls).
+
+### Choosing a pose, the voice, and the demo video
+
+* **In the launcher**: tick poses in the library and press *Practise this pose now* on any
+  card, or press **Camera: choose a pose** in the sidebar to open the camera at once and pick
+  the pose there. *Skip - practise as a guest* on the profile screen needs no form and saves
+  nothing. On the get-ready screen a **Pose** box swaps the pose, **Play audio / Stop audio**
+  speak or silence the instructions on demand, and the card shows the **demo video** (or the
+  photograph - two tabs). The sidebar **Voice: ON/OFF** button is one switch for the whole app
+  and cuts speech mid-sentence.
+* **In the camera window** (buttons across the top, or keys): `n` / `b` next / previous pose,
+  `l` the pose list (or `1`-`9`, `0` to jump), `d` a large demo over the picture, `v` voice
+  on/off (off silences at once, on works even if the session started silent), `a` say the last
+  instruction again. The window is resizable and the picture scales to it.
+* **The demo video** (`yoga/demo.py`) is a looping stick figure drawn from *real* pose data: for
+  each pose the joints of a real photograph (the textbook gallery photo where the pooled
+  datasets were poor, otherwise the typical photograph of that pose in `data/landmarks`,
+  rebuilt with `python tools/fitting/build_demo.py` into `data/demo_poses.json`). It moves
+  from a plain starting position (standing, all fours, face down, kneeling) into the pose,
+  holds it breathing, and returns - with every bone at its real length. Mountain and Easy
+  pose start where they end, so they only breathe; Cat-Cow moves between its two real shapes.
+  The starting positions are generic illustration, and a single stick figure cannot show a
+  spine's curve, so Cat-Cow shows the head and pelvis moving rather than the arch.
+
+### The look
+
+One black theme runs through every screen: near-black page, hairline borders,
+square corners, monospaced capitals for labels, white as the only accent, and a
+thin blue-orange-pink rule under each title (the same tokens as the Smart Customer
+Segmentation app). The tokens live in `yoga/theme.py`; `yoga/ui.py` is the Tk
+toolkit (sharp on scaled displays, dark title bar, no pop-up dialogs) used by
+`launcher.py` and `collect.py`; `yoga/draw.py` draws real TrueType text on the
+camera view. Regenerate every picture below with `python tools/session/ui_screenshots.py`.
+
+| | |
+|---|---|
+| ![Profile](docs/images/ui-1-profile.png) | ![Routine and ask the coach](docs/images/ui-2-routine.png) |
+| ![Pose library](docs/images/ui-3-library.png) | ![Personalised plan](docs/images/ui-4-plan.png) |
+| ![Get ready](docs/images/ui-5-practice.png) | ![Session summary](docs/images/ui-6-summary.png) |
 
 ---
 
@@ -152,8 +226,10 @@ through, so nobody sits through instructions they do not need.
 
 | | |
 |---|---|
-| ![Guiding you in](docs/images/ui-01-guiding.png) | ![After a completed hold](docs/images/ui-03-after-hold.png) |
-| The **IN FRAME** panel shows whether the camera can see your head, body and feet, how far away you are, and the one thing to fix next. | The **reference card** shows the shape to make and which step you are on, cycling through both accepted arm forms. |
+| ![Chair pose](docs/images/hud-utkatasana.png) | ![Downward dog](docs/images/hud-adho_mukha.png) |
+| The **IN FRAME** panel shows whether the camera can see your head, body and feet, how far away you are, and the one thing to fix next. The joint table names each fault in words. | Poses other than Tree show the **animated demo and three steps** on their card; the step list on the right slides so it never covers the card. The toolbar across the top picks the pose, switches the voice and opens the demo. |
+| ![Pose list](docs/images/hud-pose-menu.png) | ![Large demo](docs/images/hud-demo.png) |
+| `l` (or the pose name) opens the list of all ten poses; click one or press its number. | `d` opens the demo large, with the step it is showing. |
 
 **One correction at a time.** A fault must persist a second before it is spoken,
 each cue has its own cooldown, and a repeated fault escalates from a soft reminder
@@ -296,18 +372,21 @@ yoga/              the engine (one package)
   coaching           coach.py (Tree walk-in)  guide.py (step guide, every other pose)
                      feedback.py (cues + voice)  phrasing.py  nlp.py ("Ask the coach")
   people             profile.py (health profile)  collection.py (volunteer data)  storage.py (practice log)
-  display            overlay.py
+  display            theme.py (colours, fonts)  draw.py (text on camera frames)  overlay.py (camera view + controls)
+                     ui.py (Tk toolkit for launcher.py and collect.py)  demo.py (looping pose demos)
 
 tools/             run once / occasionally, grouped by purpose
   datasets/        get_dataset  get_yoga107  get_yoga_for_all  get_commons_poses
                    export_landmarks (-> data/landmarks)  validate_landmarks
   fitting/         build_library (refit all poses)  calibrate_thresholds  fit_asana  fit_reference
+                   build_demo (the real shapes behind the demo videos -> data/demo_poses.json)
   evaluation/      library_eval  external_check  pose_check  deviation_study  confusion
                    validate_dataset  make_validation (regenerates docs/reports/VALIDATION.md)
-  session/         analyse  simulate_session  demo_frames  report
+  session/         analyse  simulate_session  demo_frames  report  ui_screenshots (regenerates docs/images)
 tests/             selftest  test_flow  test_nlp  test_collection  test_landmark_export   (offline, no camera)
 
-data/              asana_fits.json (the fitted library)   results/ (evaluation outputs)
+data/              asana_fits.json (the fitted library)   demo_poses.json (shapes for the demo videos)
+                   results/ (evaluation outputs)
                    landmarks/ (landmark + angle CSVs and skeletons per pose, see its README)
                    datasets/ users/ collected/ (git-ignored)   samples/ demo/
 assets/gallery/    the ten pose photos + credits.json
@@ -329,9 +408,10 @@ Known limits (numbers in [docs/reports/VALIDATION.md](docs/reports/VALIDATION.md
 recognised well but form quality is not yet validated; Cobra is permissive; Child's pose is the
 weakest for one camera.
 
-Not yet connected in the launcher: the "Ask the coach" NLP box, the user ID and medication
-fields, and the volunteer-collection button (the modules and tests exist). Next: hand-tune the
-remaining poses with volunteer data, desk-posture mode, rPPG vitals, packaging.
+The launcher also has the "Ask the coach" box, the user ID, the medication field, the pose
+hierarchy and a button that opens the volunteer-collection window. Next: hand-tune the
+remaining poses with volunteer data, test every pose on a real webcam, desk-posture mode, rPPG
+vitals, packaging.
 
 ---
 
