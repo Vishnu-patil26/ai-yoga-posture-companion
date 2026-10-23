@@ -46,6 +46,7 @@ COL_RAISED = theme.bgr(_T["card2"])
 
 PANEL_W = 330
 CARD_W, CARD_H = 250, 300
+GUIDE_CARD_H = CARD_H            #: the pose guide card: the step list above it needs the rest of the column
 FRAMING_H = 182                   #: height of the "can the camera see you" panel
 MAX_STEP_ROWS = 6                 #: the step list must end above the card that sits below it
 COL_CARD_BONE = COL_BONE
@@ -403,8 +404,9 @@ def draw_pose_guide(frame: np.ndarray, photo: np.ndarray | None, name: str,
     shape; this shows the actual pose and how to get into it.
     """
     h, w = frame.shape[:2]
-    x, y = w - CARD_W - 16, h - CARD_H - 16
-    _panel(frame, x, y, CARD_W, CARD_H, alpha=0.90)
+    ch = GUIDE_CARD_H
+    x, y = w - CARD_W - 16, h - ch - 16
+    _panel(frame, x, y, CARD_W, ch, alpha=0.90)
     top = y + 34
     if demo_img is not None and demo_img.size:
         dh, dw = demo_img.shape[:2]
@@ -433,7 +435,7 @@ def draw_pose_guide(frame: np.ndarray, photo: np.ndarray | None, name: str,
             pen.text((x + CARD_W - 14, y + 21), tag, 11, COL_OK if done else COL_WARN, MONO, False, "r")
         pen.text((x + 14, top + 12), Pen.clip(name, CARD_W - 28, 14, "sans", True), 14, COL_TEXT, "sans", True)
         ly = top + 32
-        for i, step in enumerate(steps[:3], 1):
+        for i, step in enumerate(steps[:6], 1):
             # finished steps are mint, the one to do now is bright, later ones dim
             if current is None:
                 colour = COL_DIM
@@ -443,8 +445,8 @@ def draw_pose_guide(frame: np.ndarray, photo: np.ndarray | None, name: str,
                 colour = COL_TEXT
             else:
                 colour = COL_DIM
-            for j, line in enumerate(Pen.wrap(step, CARD_W - 52, 12)[:3]):
-                if ly > y + CARD_H - 6:
+            for j, line in enumerate(Pen.wrap(step, CARD_W - 52, 12)[:2]):
+                if ly > y + ch - 6:
                     return
                 if j == 0:
                     pen.text((x + 14, ly), f"{i}", 11, colour, MONO, True)
@@ -520,6 +522,39 @@ def draw_rest_panel(frame: np.ndarray, remaining: float, target: float) -> None:
         pen.text((x + CARD_W // 2, y + 160), str(secs), 96, COL_WARN, "sans", True, "m")
         pen.text((x + 16, y + 248), "breathe, and shake out the leg", 12, COL_DIM)
         pen.text((x + 16, y + 268), "jump back in early any time", 11, COL_FAINT, MONO)
+
+
+def draw_angle_report(frame: np.ndarray, rows: list[dict], avg: float, line: str = "") -> None:
+    """Bottom-right, replacing the pose card once the hold is over: how each part of the body did.
+
+    ``rows`` are the per-part verdicts the sequence built from the joints it measured while the pose
+    was held (yoga/flow.py): good, nearly there, or fix this, with the one correction that mattered.
+    """
+    h, w = frame.shape[:2]
+    x, y = w - CARD_W - 16, h - CARD_H - 16
+    _panel(frame, x, y, CARD_W, CARD_H, alpha=0.90)
+    cv2.line(frame, (x + 14, y + 30), (x + CARD_W - 14, y + 30), COL_RULE, 1)
+    colour = {"good": COL_OK, "nearly": COL_WARN, "fix": COL_BAD}
+    word = {"good": "good", "nearly": "nearly there", "fix": "fix this"}
+    with Pen(frame, x, y, x + CARD_W, y + CARD_H) as pen:
+        _label(pen, (x + 14, y + 21), "angle check")
+        if avg:
+            pen.text((x + CARD_W - 14, y + 21), f"{avg:.0f}% overall", 11, COL_OK if avg >= 70 else COL_WARN,
+                     MONO, False, "r")
+        ry = y + 54
+        for r in rows[:4]:
+            pen.text((x + 14, ry), r["group"], 14, COL_TEXT, "sans", True)
+            pen.text((x + CARD_W - 14, ry), word[r["verdict"]], 12, colour[r["verdict"]], MONO, True, "r")
+            ry += 19
+            if r["cue"]:
+                for ln in Pen.wrap(r["cue"], CARD_W - 28, 12)[:2]:
+                    pen.text((x + 14, ry), ln, 12, COL_DIM)
+                    ry += 15
+            ry += 10
+        if line:
+            cv2.line(frame, (x + 14, y + CARD_H - 74), (x + CARD_W - 14, y + CARD_H - 74), COL_RULE, 1)
+            for i, ln in enumerate(Pen.wrap(line, CARD_W - 28, 12)[:3]):
+                pen.text((x + 14, y + CARD_H - 56 + i * 16), ln, 12, COL_TEXT)
 
 
 FRAMING_ROWS = (("head", "Head in shot"), ("torso", "Body in shot"),

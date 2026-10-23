@@ -629,6 +629,84 @@ def test_speech_pacing() -> None:
     check("an uninterrupted line is spoken in full",
           _FakePyttsx3.engines[-1].words == ["one", "two", "three"], str(_FakePyttsx3.engines[-1].words))
 
+    # Starting the camera a second time in the same process (the launcher does this once per pose):
+    # pyttsx3 can hand back the engine of the previous session, still inside its loop, and startLoop
+    # raises "run loop already started".  The line must still be spoken, with no warning.
+    from yoga import feedback as _fb
+
+    class _StaleEngine(_FakeEngine):
+        def __init__(self):
+            super().__init__()
+            self.in_loop = True               # left in its loop by the earlier session
+            self.loops_ended = 0
+
+        def startLoop(self, _block=True):
+            if self.in_loop:
+                raise RuntimeError("run loop already started")
+            self.in_loop = True
+
+        def endLoop(self):
+            self.in_loop = False
+            self.loops_ended += 1
+
+    class _StalePyttsx3:
+        engines: list = []
+
+        @staticmethod
+        def init():
+            e = _StaleEngine()
+            _StalePyttsx3.engines.append(e)
+            return e
+
+    stale = Speaker(enabled=False)
+    stale._line_gen = stale._gen
+    stale._speak_once(_StalePyttsx3, "one two three", 165, 1.0)
+    check("a stale engine left in its run loop is recovered and the line is spoken in full",
+          _StalePyttsx3.engines[-1].words == ["one", "two", "three"], str(_StalePyttsx3.engines[-1].words))
+    check("recovery does not raise the 'could not speak' warning", not stale._warned)
+    check("the engine lock is free again after a line", _fb._ENGINE_LOCK.acquire(blocking=False)
+          and (_fb._ENGINE_LOCK.release() or True))
+
+    class _BrokenPyttsx3:
+        @staticmethod
+        def init():
+            raise OSError("no audio device")
+
+    broken = Speaker(enabled=False)
+    broken._line_gen = broken._gen
+    broken._speak_once(_BrokenPyttsx3, "hello", 165, 1.0)
+    check("a failing engine is reported once and still releases the lock",
+          broken._warned and _fb._ENGINE_LOCK.acquire(blocking=False) and (_fb._ENGINE_LOCK.release() or True))
+
+    # two speakers must not use the engine at once: the second waits for the first
+    import threading as _th
+    order: list = []
+
+    class _SlowPyttsx3:
+        @staticmethod
+        def init():
+            order.append("init")
+            e = _FakeEngine()
+            real_iter = e.iterate
+
+            def iterate():
+                order.append("word")
+                real_iter()
+            e.iterate = iterate
+            return e
+
+    s1, s2 = Speaker(enabled=False), Speaker(enabled=False)
+    s1._line_gen, s2._line_gen = s1._gen, s2._gen
+    t1 = _th.Thread(target=s1._speak_once, args=(_SlowPyttsx3, "a b c", 165, 1.0))
+    t2 = _th.Thread(target=s2._speak_once, args=(_SlowPyttsx3, "d e f", 165, 1.0))
+    t1.start()
+    t2.start()
+    t1.join(5)
+    t2.join(5)
+    inits = [i for i, x in enumerate(order) if x == "init"]
+    check("two speakers take turns on the engine: the second starts only after the first has finished",
+          len(inits) == 2 and order[inits[1] - 1] == "word", str(order))
+
     # the voice can be switched off and on again, even if the speaker started silent
     class _NoWorker(Speaker):
         def _run(self, rate, volume):             # the real worker would open an audio device

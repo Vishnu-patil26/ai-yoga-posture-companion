@@ -15,22 +15,29 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .feedback import estimate_speech_seconds
+
 
 @dataclass(frozen=True)
 class Step:
-    text: str
-    keys: tuple[str, ...]          #: measurements that must be inside tolerance
+    text: str                      #: what is said, and shown as the caption
+    keys: tuple[str, ...]          #: measurements that must be inside tolerance (none: a timed step)
+    label: str = ""                #: the short line on the card
+    dwell: float = 3.0             #: seconds before it may finish, so its sentence can be spoken
 
 
 class StepGuide:
-    def __init__(self, asana, steps: list[tuple[str, tuple[str, ...]]],
+    def __init__(self, asana, steps: list[tuple],
                  settle_s: float = 1.2, min_dwell_s: float = 3.0,
                  timeout_s: float = 25.0) -> None:
         present = {c.key for c in asana.checks}
         for v in asana.variants:
             present |= {c.key for c in v.overrides}
         # Keys this pose does not measure are dropped, never required.
-        self.steps = [Step(text, tuple(k for k in keys if k in present)) for text, keys in steps]
+        # Each entry is (text, keys) or (text, keys, label).  A step stays on screen long enough
+        # for its sentence to be spoken, or the next one would talk over it.
+        self.steps = [Step(e[0], tuple(k for k in e[1] if k in present), e[2] if len(e) > 2 else e[0],
+                           max(min_dwell_s, estimate_speech_seconds(e[0]) + 0.5)) for e in steps]
         self.settle_s, self.min_dwell_s, self.timeout_s = settle_s, min_dwell_s, timeout_s
         self.index = 0
         self.finished = not self.steps
@@ -58,7 +65,7 @@ class StepGuide:
             self._ok_since = None
         elapsed = t - self._started
         done = (ok and self._ok_since is not None and t - self._ok_since >= self.settle_s
-                and elapsed >= self.min_dwell_s)
+                and elapsed >= step.dwell)
         if not done and elapsed < self.timeout_s:
             return None
         self.index += 1

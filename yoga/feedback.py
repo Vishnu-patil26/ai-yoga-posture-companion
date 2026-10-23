@@ -195,6 +195,14 @@ def estimate_speech_seconds(text: str, rate_wpm: int = DEFAULT_WPM) -> float:
     return words / (max(1, rate_wpm) / 60.0) + SPEECH_PAD_S
 
 
+#: pyttsx3 keeps ONE engine per driver and hands the same object to every caller that asks while it
+#: is still alive.  Two speakers in one process (the launcher opens the camera window once per pose, and
+#: the last pose's worker may still be winding down) would then share an engine that is inside its run
+#: loop.  This lock makes them take turns.
+_ENGINE_LOCK = threading.Lock()
+_ENGINE_WAIT_S = 2.0
+
+
 class Speaker:
     """Text-to-speech on a worker thread.
 
@@ -340,6 +348,9 @@ class Speaker:
         engine = None
         gen = self._line_gen
         settled = False                                # finished or already stopped: nothing left to stop
+        # Wait (briefly) for another speaker that is still using the engine; if it never lets go, go on
+        # anyway rather than stay silent for the whole session.
+        got_lock = _ENGINE_LOCK.acquire(timeout=_ENGINE_WAIT_S)
         try:
             engine = pyttsx3.init()
             engine.setProperty("rate", rate)
@@ -354,7 +365,17 @@ class Speaker:
             # pyttsx3's non-blocking loop and this thread looks up every 20 ms to see
             # whether cancel() has been called.  Measured: a line is silent 0.16 s
             # after stop().
-            engine.startLoop(False)
+            try:
+                engine.startLoop(False)
+            except RuntimeError:
+                # "run loop already started": pyttsx3 returned an engine that an earlier line or session
+                # left inside its loop.  End that loop and start ours; without this the voice stays dead
+                # for the rest of the session.
+                try:
+                    engine.endLoop()
+                except Exception:
+                    pass
+                engine.startLoop(False)
             try:
                 limit = max(8.0, self.estimate_seconds(text) * 3.0 + 5.0)   # never hang the worker
                 waited = 0.0
@@ -387,6 +408,8 @@ class Speaker:
                     engine.stop()
                 except Exception:
                     pass
+            if got_lock:
+                _ENGINE_LOCK.release()
 
 
 def play_alert() -> None:

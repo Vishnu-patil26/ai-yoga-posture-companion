@@ -9,8 +9,9 @@ starting position into that shape, holds it breathing, and comes back:
     all fours ->  Downward Dog
     face down ->  Cobra
     kneeling  ->  Child's pose
-    (Mountain and Easy pose start where they end, so they just breathe; Cat-Cow
-     moves between its two real shapes, cat and cow)
+    Mountain  ->  arms down, sweep them overhead, hold, lower them
+    (Easy pose starts where it ends, so it just breathes; Cat-Cow moves between its
+     two real shapes, cat and cow)
 
 The figure keeps every bone at its real length: it is built from joint *angles*
 (forward kinematics), not by sliding points, and the angles are the ones measured
@@ -167,6 +168,12 @@ class Demo:
             self.shape = _Shape(shapes["shape"]["pts"])
             self.end = dict(self.shape.params)
             self.start = dict(START.get(key, self.end))
+            if key == "tadasana":
+                # Mountain: start with the arms down (the real shape), sweep them overhead and back.
+                # An arm up is the same bone pointing the other way up, on the same side of the body.
+                self.start = dict(self.end)
+                for k in ("ua_L", "fa_L", "ua_R", "fa_R"):
+                    self.end[k] = -self.end[k]
         self.moves = self.cat_cow or any(abs(_wrap(self.end[k] - self.start[k])) > 8 for k in KEYS)
         self.duration = CAT_COW_S if self.cat_cow else LOOP_S
         self._extent = self._measure()
@@ -188,15 +195,19 @@ class Demo:
         return 1.0 - _smooth((t - T_START - T_IN - T_HOLD) / T_OUT)
 
     def step(self, t: float) -> int:
-        """Which of the three written steps this moment illustrates (0, 1 or 2)."""
+        """Which of the four captions this moment illustrates: 0 the start position, 1 moving
+        into the pose, 2 holding it, 3 coming out (yoga/instructions.py has the words).  Cat-Cow
+        uses 1 for cow and 2 for cat."""
         u = self.progress(t)
         if self.cat_cow:
             return 1 if u > 0.5 else 2
         t = t % self.duration
         if not self.moves:
-            return int(min(2, 3 * t / self.duration))
+            return int(min(3, 4 * t / self.duration))
         if t < T_START + 0.4:
             return 0
+        if t >= T_START + T_IN + T_HOLD:
+            return 3
         return 1 if u < 0.97 else 2
 
     def params(self, t: float) -> dict[str, float]:

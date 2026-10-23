@@ -107,7 +107,7 @@ def test_personalise() -> None:
     routine = rt.all_routines()["standing_workers"]          # includes Downward Dog
     healthy = prof.personalise(base(), routine)
     check(all(not i.skipped for i in healthy.items), "healthy adult: nothing skipped")
-    check(all(i.hold_s == 20 for i in healthy.items), "healthy adult: full holds")
+    check(all(i.hold_s == rt.POSES[i.pose_key].hold_s for i in healthy.items), "healthy adult: full holds")
     high = prof.personalise(base(bp="High"), routine)
     dog = next(i for i in high.items if i.pose_key == "adho_mukha")
     check(dog.skipped, "high BP skips the inversion")
@@ -145,9 +145,13 @@ def test_posespecs_and_guide() -> None:
         check(set(ps.FEATURES[k]) == have, f"{k}: fitted checks == the pose's defining measurements")
         check(set(ps.CUES[k]) <= have, f"{k}: every cue belongs to a measured feature")
         check(all(f in real for f in ps.FEATURES[k]), f"{k}: every feature exists in the evaluator")
-        check(3 <= len(ps.STEPS[k]) <= 3, f"{k}: three guided steps")
-        check(all(any(key in have for key in keys) for _, keys in ps.STEPS[k]),
-              f"{k}: every step checks at least one measured feature")
+        check(4 <= len(ps.STEPS[k]) <= 5, f"{k}: four or five guided steps")
+        check(all(len(e) == 3 for e in ps.STEPS[k]), f"{k}: every step has its words, its measurements and a card label")
+        check(all(all(key in have for key in e[1]) for e in ps.STEPS[k]),
+              f"{k}: every measurement a step waits for is one the pose measures")
+        check(sum(1 for e in ps.STEPS[k] if e[1]) >= 3, f"{k}: at least three steps wait for the body to get there")
+        check(all(len(e[2]) <= 30 for e in ps.STEPS[k]), f"{k}: card labels are short enough for the card")
+        check(all(len(e[0].split()) <= 22 for e in ps.STEPS[k]), f"{k}: each spoken step is short enough to say")
         # a pose-specific cue, not the generic fallback, for its most heavily weighted feature
         top = max(ps.FEATURES[k], key=ps.FEATURES[k].get)
         c = a.check(top)
@@ -167,18 +171,204 @@ def test_posespecs_and_guide() -> None:
 
     g = StepGuide(asana_lib.LIBRARY["utkatasana"], ps.STEPS["utkatasana"])
     check(g.update(0.0, _E(False)) == ps.STEPS["utkatasana"][0][0], "guide speaks step 1 first")
+    d0 = g.steps[0].dwell
+    check(d0 >= 3.0, "a step waits at least the minimum dwell")
     check(g.update(2.0, _E(True)) is None and g.index == 0, "needs the min dwell before advancing")
-    check(g.update(3.1, _E(True)) is None and g.index == 0, "needs the pose held for the settle time")
-    check(g.update(3.4, _E(True)) is not None and g.index == 1, "advances once held and settled")
+    check(g.update(d0 - 0.1, _E(True)) is None and g.index == 0, "needs the sentence time before advancing")
+    check(g.update(d0 + 1.5, _E(True)) is not None and g.index == 1, "advances once held and settled")
+    longest = max(g.steps, key=lambda s: len(s.text))
+    check(longest.dwell > 3.0, "a long sentence is given time to be spoken")
     g2 = StepGuide(asana_lib.LIBRARY["utkatasana"], ps.STEPS["utkatasana"])
     g2.update(0.0, _E(False))
     check(g2.update(10.0, _E(False)) is None and g2.index == 0, "a wrong pose does not advance early")
     check(g2.update(26.0, _E(False)) is not None and g2.index == 1, "timeout moves on so nobody is trapped")
     g3 = StepGuide(asana_lib.LIBRARY["utkatasana"], ps.STEPS["utkatasana"])
     g3.update(0.0, None)
-    for t in (4.0, 8.0, 12.0, 16.0, 20.0, 24.0, 26.0, 52.0, 78.0):
+    for t in [4.0, 8.0, 12.0, 16.0, 20.0, 24.0] + [26.0 * i for i in range(1, len(ps.STEPS["utkatasana"]) + 2)]:
         g3.update(t, None)
     check(g3.finished, "guide finishes after the last step")
+
+
+def test_instructions() -> None:
+    from yoga import instructions as ins
+    from yoga import demo
+    check(set(ins.HOWTO) == set(rt.POSES), "every pose has how-to instructions")
+    for k, h in ins.HOWTO.items():
+        check(6 <= len(h.steps) <= 8, f"{k}: six to eight numbered steps ({len(h.steps)})")
+        check(all(s.strip() and s == s.strip() and "  " not in s for s in h.steps), f"{k}: steps are clean sentences")
+        check(all(s.rstrip().endswith((".", "!")) for s in h.steps), f"{k}: every step ends like a sentence")
+        check(all(len(s) <= 190 for s in h.steps), f"{k}: no step is a wall of text")
+        check(len(h.mistakes) >= 3 and all(":" in m for m in h.mistakes), f"{k}: mistakes say what goes wrong and the fix")
+        check(bool(h.camera) and bool(h.breath) and bool(h.release), f"{k}: camera, breathing and release are written")
+        check(len(h.demo) == 4 and all(c.strip() for c in h.demo), f"{k}: four demo captions")
+        check(not any("—" in s for s in h.steps + h.mistakes + h.demo), f"{k}: plain punctuation")
+        check(h.steps != rt.POSES[k].steps, f"{k}: the how-to is more than the old three lines")
+        check(ins.spoken(k).startswith(h.camera) and "Step 1." in ins.spoken(k) and h.release in ins.spoken(k),
+              f"{k}: the audio reads set-up, steps, breath and release")
+        check(ins.demo_caption(k, 2) == h.demo[2] and ins.demo_caption(k, 99) == h.demo[3],
+              f"{k}: demo captions are picked by phase and clamped")
+    # the Mountain demo now teaches: the arms really go overhead and come back down
+    import numpy as np
+    c = demo.clip("tadasana")
+    check(c.moves, "Mountain demo moves")
+    pts0, pts1 = c.points(0.2), c.points(demo.T_START + demo.T_IN + 1.0)
+    rise0 = pts0["LEFT_WRIST"][1] - pts0["LEFT_SHOULDER"][1]
+    rise1 = pts1["LEFT_WRIST"][1] - pts1["LEFT_SHOULDER"][1]
+    check(rise0 > 0 and rise1 < 0, "Mountain demo: wrist below the shoulder at the start, above it when holding")
+    sides = np.sign((pts0["LEFT_WRIST"][0] - pts0["LEFT_SHOULDER"][0]) * (pts1["LEFT_WRIST"][0] - pts1["LEFT_SHOULDER"][0]))
+    check(sides >= 0, "Mountain demo: the arm stays on its own side of the body")
+    check([c.step(t) for t in (0.2, 2.0, 5.0, 8.5)] == [0, 1, 2, 3], "Mountain demo: captions follow start, in, hold, out")
+
+
+def test_pose_flow() -> None:
+    """The whole practice of a fitted pose as one sequence, run with a scripted body and no camera."""
+    import numpy as np
+    from yoga import flow as fl
+    from yoga import posespecs as ps
+    from yoga import overlay
+    from yoga.state_machine import State
+
+    class _Res:
+        def __init__(self, key, ok, cue="Fix it"):
+            self.check = type("C", (), {"key": key})()
+            self.ok, self.deviation, self._cue = ok, 0.0, cue
+
+        def cue(self):
+            return self._cue
+
+    class _Ev:
+        def __init__(self, frontality=0.1, framing=True, usable=True, results=()):
+            self.features = {"framing": {"ok": framing}, "frontality": frontality}
+            self.usable, self.results = usable, list(results)
+
+    def run(key, body, seconds=900.0, hold_s=10):
+        """Feed the sequence a body that is always in view and does the pose; return (lines, phases)."""
+        a = asana_lib.LIBRARY[key]
+        f = fl.PoseFlow(key, a, ps.STEPS[key], hold_s)
+        lines, seen, t, hold_t0 = [], [], 0.0, None
+        done_once = False
+        while t < seconds and not f.finished:
+            state = State.HOLDING if f.phase == "hold" else State.SETUP
+            completed = False
+            if f.phase == "hold":
+                hold_t0 = t if hold_t0 is None else hold_t0
+                if t - hold_t0 >= hold_s and not done_once:
+                    completed = done_once = True
+            say = f.update(t, body(a, f), state, completed, 91.0)
+            if f.phase not in seen:
+                seen.append(f.phase)
+            if say:
+                lines.append((round(t, 1), f.phase, say))
+            t += 0.1
+        return f, lines, seen
+
+    def good(a, f):
+        return _Ev(frontality=0.1 if f.view == "side" else 0.7, results=[_Res(c.key, True) for c in a.checks])
+
+    # --- Chair (seen from the side), everything right
+    f, lines, seen = run("utkatasana", good)
+    check(f.finished and f.finished_at is not None, "the sequence reaches its end")
+    check(seen == ["stand", "turn", "steps", "hold", "check", "release"],
+          f"the phases come in the order stand, turn, steps, hold, check, release: {seen}")
+    text = [ln for _, _, ln in lines]
+    check("stand up straight" in text[0], "it starts by asking you to stand straight")
+    check("sideways" in text[1], "then to turn sideways (Chair is read from the side)")
+    check("slowly, one step at a time" in text[2], "then to get into the pose slowly, one step at a time")
+    guided = [s[0] for s in ps.STEPS["utkatasana"]]
+    spoken_steps = [ln for ln in text if ln in guided]
+    check(spoken_steps == guided, "every pose step is spoken once, in order")
+    check(any("hold the pose for 10 seconds" in ln for ln in text), "it says to hold for 10 seconds")
+    rep = next(ln for ln in text if ln.startswith("Angle check."))
+    check("Legs: good." in rep and "Spine and hips: good." in rep and "Arms: good." in rep and "91 percent" in rep,
+          rep)
+    check(sum(1 for ln in text if "breathe in" in ln.lower()) >= 3 and sum(1 for ln in text if "out" in ln.lower()) >= 3,
+          "it breathes in and out three times")
+    check("next pose" in text[-1] and "repeat" in text[-1], "it ends by offering the next pose or a repeat")
+    order = [ph for _, ph, _ in lines]
+    check(order.index("hold") > order.index("steps") and order.index("check") > order.index("hold")
+          and order.index("release") > order.index("check"), "the angle check comes after the hold, then the release")
+    # the hold timer is shut until the steps are done, and the corrections only speak in the hold
+    g = fl.PoseFlow("utkatasana", asana_lib.LIBRARY["utkatasana"], ps.STEPS["utkatasana"], 10)
+    check(not g.hold_open and not g.cues_allowed, "the hold timer starts shut")
+    g.index = fl.PHASES.index("hold")
+    check(g.hold_open and g.cues_allowed, "it opens only for the hold")
+    g.index = fl.PHASES.index("check")
+    check(not g.hold_open and not g.cues_allowed, "and closes again for the angle check")
+
+    # --- the angle check names the part that was off, with the one correction that mattered
+    def leg_off(a, f):
+        res = [_Res(c.key, c.key not in ("knee_bent", "knee_straight"), "Sit lower") for c in a.checks]
+        return _Ev(frontality=0.1, results=res)
+
+    f2, lines2, _ = run("utkatasana", leg_off)
+    rep2 = next(ln for _, _, ln in lines2 if ln.startswith("Angle check."))
+    legs = next(r for r in f2.report if r["group"] == "Legs")
+    check(legs["verdict"] == "fix" and legs["cue"] == "Sit lower" and "Legs: Sit lower." in rep2, rep2)
+    check(next(r for r in f2.report if r["group"] == "Spine and hips")["verdict"] == "good",
+          "the parts that were right still say good")
+
+    # --- a pose seen from the front asks you to face the camera, and waits until you do
+    fw, lw, _ = run("virabhadrasana", good)
+    check("face the camera" in lw[1][2], "Warrior II asks you to face the camera")
+    turned = next(t0 for t0, ph, _ in lw if ph == "steps")
+    fs, ls, _ = run("virabhadrasana", lambda a, f: _Ev(frontality=0.1, results=[_Res(c.key, True) for c in a.checks]))
+    waited = next(t0 for t0, ph, _ in ls if ph == "steps")
+    check(turned < waited - (fl.TIMEOUT_S - 5.0),
+          f"a body that has turned moves on at once; one that has not waits for the time-out ({turned} vs {waited})")
+
+    # --- nobody is trapped: with no body at all it still gets through, and says it could not check
+    nf = fl.PoseFlow("tadasana", asana_lib.LIBRARY["tadasana"], ps.STEPS["tadasana"], 10)
+    t, said = 0.0, []
+    while t < 900 and not nf.finished:
+        s = nf.update(t, None, State.WAITING, False, 0.0)
+        if s:
+            said.append(s)
+        t += 0.1
+    check(nf.finished, "with nobody in view the sequence still ends (no step traps you)")
+    check(any("not held long enough" in s for s in said), "and says the pose was not held long enough to check")
+
+    # --- the spoken correction never says how much twice ("Rise a little - a little")
+    from yoga import phrasing
+    from yoga.evaluator import score_check
+    twice = []
+    for key_ in ps.FEATURES:
+        for chk in asana_lib.LIBRARY[key_].checks:
+            for sign in (-1, 1):
+                res = score_check(chk, chk.target + sign * 1.6 * chk.tol)
+                said = phrasing.spoken_phrase(res, "soft", {}, terse=False)
+                head, _, tail = said.partition(" - ")
+                if tail and tail.rstrip(".").lower() in head.lower():
+                    twice.append(said)
+    check(not twice, f"no correction repeats its own qualifier: {twice[:3]}")
+    check(phrasing.spoken_phrase(score_check(asana_lib.LIBRARY["utkatasana"].check("knee_straight"),
+                                             asana_lib.LIBRARY["utkatasana"].check("knee_straight").target + 12),
+                                 "soft", {}).count("little") <= 1, "a correction says 'a little' at most once")
+
+    # --- every measurement of every pose belongs to a part of the body
+    grouped = {k for _, keys in fl.GROUPS for k in keys}
+    check(all(k in grouped for key in ps.FEATURES for k in ps.FEATURES[key]),
+          "every measurement of every pose belongs to arms, legs, spine and hips, or neck")
+    check(set(ps.VIEW) == set(fl.KIND) == set(ps.STEPS), "each fitted pose has a view and a starting kind")
+
+    # --- on screen
+    frame = np.zeros((720, 1280, 3), np.uint8)
+    overlay.draw_angle_report(frame, f2.report, 88.0, "Slowly come out of the pose.")
+    check(int(frame.max()) > 100, "the angle check panel is drawn")
+
+    # --- the session wires it up: 10 s holds, the six phases, Tree untouched
+    import app as trainer
+    args = trainer.parse_args(["--asana", "tadasana", "--no-db"])
+    s_ = trainer.PoseSession("tadasana", args)
+    check(s_.flow is not None and s_.asana.hold_target_s == 10.0, "a fitted pose runs the sequence with a 10 s hold")
+    check([p_.title for p_ in s_.journey] == ["Stand straight", "Face the camera", "Get into the pose",
+                                              "Hold 10 seconds", "Angle check", "Release and breathe"],
+          "the step panel lists the six phases")
+    s_.reset()
+    check(s_.flow is not None and s_.flow.index == 0 and not s_.flow._started, "repeating a pose starts the sequence again")
+    tree = trainer.PoseSession("vrikshasana", trainer.parse_args(["--asana", "vrikshasana", "--no-db"]))
+    check(tree.flow is None and tree.asana.hold_target_s == 20.0, "Tree keeps its own coach and its 20 s hold")
+    check(all(rt.POSES[k].hold_s == 10 for k in rt.POSES if k != "vrikshasana") and rt.POSES["vrikshasana"].hold_s == 20,
+          "the plan holds the nine for 10 seconds and Tree for 20")
 
 
 def test_screens() -> None:
@@ -571,7 +761,7 @@ def test_demo_clips() -> None:
         check(finite, f"{key}: every joint of every frame is a real number")
         low = min(max(p[1] for j, p in c.points(t).items() if j != "NOSE") for t in times)
         check(abs(low) < 1e-6, f"{key}: the figure stands on the ground line")
-        check({c.step(t) for t in times} <= {0, 1, 2}, f"{key}: the clip only ever shows steps 1-3")
+        check({c.step(t) for t in times} <= {0, 1, 2, 3}, f"{key}: the clip only ever shows its four captions")
         if key != "marjaryasana":                    # cat-cow blends two real shapes; the rest are kinematic
             arm = [float(np.linalg.norm(c.points(t)["LEFT_ELBOW"] - c.points(t)["LEFT_SHOULDER"])) for t in times]
             leg = [float(np.linalg.norm(c.points(t)["LEFT_KNEE"] - c.points(t)["LEFT_HIP"])) for t in times]
@@ -727,7 +917,7 @@ def test_launcher_choose_and_audio() -> None:
 
 
 def main() -> int:
-    for fn in (test_catalogue, test_profile, test_personalise, test_posespecs_and_guide,
+    for fn in (test_catalogue, test_profile, test_personalise, test_posespecs_and_guide, test_instructions, test_pose_flow,
                test_screens, test_theme_and_draw, test_hud_layout, test_window_scaling, test_fit_frame,
                test_launcher_ui, test_launcher_practice, test_demo_clips, test_camera_controls,
                test_launcher_choose_and_audio):

@@ -162,7 +162,8 @@ python bootstrap.py --ui      # or launch.bat
 Checks: `python bootstrap.py --flow` (257 offline checks for routines, profile
 rules, the launcher screens, the drawing helpers, the HUD layout, the demo clips and
 the camera-window controls). `python bootstrap.py --clicks` is the click-through test: it
-presses every button, tab, switch and drop-down on every launcher screen (347 checks) and
+presses every button, tab, switch and drop-down on every launcher screen, Settings included
+(436 checks), and
 fails if any of them raises or lands on the wrong screen.
 
 **Moving around.** Every screen except the first has a **Home** button at the top right
@@ -182,6 +183,16 @@ the results so far are never lost; press Home again to leave.
   speak or silence the instructions on demand, and the card shows the **demo video** (or the
   photograph - two tabs). The sidebar **Voice: ON/OFF** button is one switch for the whole app
   and cuts speech mid-sentence.
+* **The practice sequence** (`yoga/flow.py`; the nine fitted poses, Tree keeps its own coach): stand straight,
+  turn sideways (or face the camera for a front-view pose), get into the pose slowly in 4 to 5 spoken steps that each
+  wait for your body, hold for 10 seconds, an angle check of your arms, legs, spine and neck (spoken and shown on
+  screen), then release, stand straight and take three slow breaths. The hold timer cannot start before the steps are
+  done, and spoken corrections come only during the hold. When it ends, `n` goes to the next pose and `r` repeats this one.
+* **How to do each pose** (`yoga/instructions.py`): every pose has a camera set-up line, 6 to 8 numbered steps,
+  breathing and time, four common mistakes with their fixes, how to come out and a care note. The launcher's
+  get-ready screen shows all of it and **Play audio** reads it. In the camera window each pose has 4 to 5 guided
+  steps (short labels on the card, a full sentence spoken and shown as the caption), and the demo captions follow
+  what the figure is doing (Mountain's arms sweep overhead and back down).
 * **In the camera window** (buttons across the top, or keys): `n` / `b` next / previous pose,
   `l` the pose list (or `1`-`9`, `0` to jump), `d` a large demo over the picture, `v` voice
   on/off (off silences at once, on works even if the session started silent), `a` say the last
@@ -204,9 +215,15 @@ session summary. Nothing else changes: the routine is still chosen by `yoga/nlp.
 still scored from joint angles, and the plain template text is shown first and stays if the model
 is slow, offline, rate-limited or rejected.
 
-* **Set up** (about a minute, free, no card): create a key at <https://console.groq.com/keys>,
-  copy `.env.example` to `.env`, and paste the key after `GROQ_API_KEY=`. `.env` is git-ignored.
-  There is no local model to install.
+* **Set up in the app** (about a minute, free, no card): open **Settings** in the sidebar, press
+  **Get a free key** (opens <https://console.groq.com/keys>), create a key, copy it, then press
+  **Paste** and **Save and connect**. The app writes the key to `.env` next to `launcher.py`
+  (git-ignored, never uploaded), tests the connection and switches the wording on. **Test
+  connection** checks a key before you save it, **Use online wording** switches it on or off without
+  losing the key, and **Remove key** deletes it. The Routine screen has a shortcut when it is off.
+  Editing `.env` by hand (see `.env.example`) or setting a Windows environment variable
+  `GROQ_API_KEY` also works; the variable takes priority over the file. There is no local model to
+  install.
 * **What the model may say** is limited by `yoga/llm.py`. It gets facts the code already decided
   and a reply is dropped if it names a pose outside the routine, quotes a number that is not in the
   facts, mentions a dose, tells the user to stop a medicine, promises a cure, claims a routine
@@ -214,12 +231,13 @@ is slow, offline, rate-limited or rejected.
   out.
 * **What leaves the computer**: the sentence typed into the coach box (e-mail addresses, phone
   numbers and links removed) or the pose names and numbers of a finished session, without the
-  user's name. Never video, frames, landmarks, the user ID or the medication field. Set
-  `YOGA_LLM=off` to keep everything on the machine.
+  user's name. Never video, frames, landmarks, the user ID or the medication field. Switch it off in
+  Settings (or set `YOGA_LLM=off`) to keep everything on the machine.
 * **Limits**: Groq's free plan allows about 30 requests a minute and 1,000 a day for this model
   (check <https://console.groq.com/docs/rate-limits>); a rate-limited call just falls back to the
   template. Free-tier terms can change.
-* **Check**: `python tests/test_llm.py` (54 offline checks with a fake model); add `--live` to make
+* **Check**: `python tests/test_llm.py` (88 offline checks with a fake model, including the settings
+  functions and the connection test); add `--live` to make
   two real calls.
 
 ### The look

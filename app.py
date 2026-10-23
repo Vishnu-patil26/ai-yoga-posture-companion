@@ -33,10 +33,11 @@ from yoga.coach import JOURNEY, QUIET_BEFORE_END_S, SEQUENCE, Coach
 from yoga.evaluator import compute_features, evaluate
 from yoga.feedback import CueEngine, Speaker, play_alert
 from yoga.filters import RollingMean
+from yoga.flow import HOLD_S as FLOW_HOLD_S, PoseFlow
 from yoga import demo, phrasing, theme
 from yoga.landmarks import PoseTracker
 from yoga.overlay import (
-    CARD_W, COL_OK, DEMO_BOX_H, draw_calibration, draw_demo_panel, draw_framing_panel, draw_hud,
+    CARD_W, COL_OK, DEMO_BOX_H, draw_angle_report, draw_calibration, draw_demo_panel, draw_framing_panel, draw_hud,
     draw_intro_frame, draw_pose_guide, draw_pose_menu, draw_reference_card, draw_rest_panel,
     draw_skeleton, draw_step_panel, draw_toolbar,
 )
@@ -439,6 +440,8 @@ class PoseSession:
                   "(run with --calibrate to personalise them)")
         if hold:
             asana = replace(asana, hold_target_s=hold)
+        elif key != "vrikshasana" and not args.no_steps:
+            asana = replace(asana, hold_target_s=float(FLOW_HOLD_S))   # the sequence holds each pose 10 s
         self.asana = asana
 
         # The guided entry sequence is written for Vrikshasana specifically - it
@@ -476,14 +479,19 @@ class PoseSession:
         self.guide_name = info.name if info else asana.name
         self.guide_steps = info.steps if info else ()
         self.guide_photo = cv2.imread(os.path.join(HERE, "assets", "gallery", key + ".jpg"))
-        self.step_guide = None
+        # The nine fitted poses run as one sequence: stand straight, turn, get into the pose step by
+        # step, hold, angle check, release and breathe (yoga/flow.py).
+        self.flow = None
+        self._flow_spec = None
         if not self.guided and not args.no_steps:
             from yoga import posespecs
-            from yoga.guide import StepGuide
             spec = posespecs.STEPS.get(key)
             if spec:
-                self.step_guide = StepGuide(asana, spec)
-                self.guide_steps = tuple(s.text for s in self.step_guide.steps)
+                self._flow_spec = spec
+                self.flow = PoseFlow(key, asana, spec, asana.hold_target_s)
+                self.guide_steps = self.flow.labels
+                self.journey = self.flow.journey
+                self.cues.state_cues = False        # the sequence says "hold it" and "well done" itself
 
     def announce(self) -> None:
         print("")
@@ -495,9 +503,12 @@ class PoseSession:
     def reset(self) -> None:
         self.sm = PoseStateMachine(hold_target_s=self.asana.hold_target_s,
                                    enter_score=self.asana.enter_score, exit_score=self.asana.exit_score)
-        self.cues = CueEngine(state_cues=self.no_coach, phrase_fn=phrasing.spoken_phrase)
+        self.cues = CueEngine(state_cues=self.no_coach and self._flow_spec is None, phrase_fn=phrasing.spoken_phrase)
         self.coach = Coach(hold_target_s=self.asana.hold_target_s)
         self.smooth.reset()
+        if self._flow_spec is not None:                 # "repeat this pose": the sequence starts again
+            self.flow = PoseFlow(self.key, self.asana, self._flow_spec, self.asana.hold_target_s)
+            self.journey = self.flow.journey
 
     def result(self) -> dict:
         st = self.sm.stats
@@ -613,7 +624,7 @@ def run_live(args) -> int:
         menu_open = False
         line = f"{ps.guide_name}. {ps.asana.setup_hint}"
         ps.banner, ps.banner_until, ps.last_line = line, now_t + BANNER_HOLD_S, line
-        if speaker.enabled:
+        if speaker.enabled and ps.flow is None:           # the sequence speaks its own first line
             speaker.say(line, now_t)
         ps.announce()
 
@@ -644,7 +655,9 @@ def run_live(args) -> int:
                 score = ps.smooth(ev.score) if ev.usable else 0.0
                 if ev.usable:
                     ev.score = score
-                state = sm.update(t, score, ev.usable)
+                # In the sequence the hold timer may only start once the pose steps are done.
+                gate = ps.flow is not None and not ps.flow.hold_open
+                state = sm.update(t, 0.0 if gate else score, ev.usable)
             else:
                 ps.smooth.reset()
                 state = sm.update(t, 0.0, False)
@@ -670,16 +683,17 @@ def run_live(args) -> int:
                     if ps.log:
                         ps.log.log_cue(t, "coach." + said.step_key, "guide", said.text)
 
-            step_guide = ps.step_guide
-            guide_active = step_guide is not None and not step_guide.finished
-            if guide_active and ev is not None:
-                spoken = step_guide.update(t, ev)
+            flow = ps.flow
+            if flow is not None and not flow.finished:
+                last_hold = sm.stats.holds[-1].avg_score if sm.stats.holds else 0.0
+                spoken = flow.update(t, ev, state, sm.just_completed, last_hold)
                 if spoken:
                     ps.banner = ps.last_line = spoken
                     ps.banner_until = t + max(BANNER_HOLD_S, speaker.estimate_seconds(spoken))
                     speaker.say(spoken, t)
-                    print(f"[{t:6.1f}s] step   {spoken}")
-            guide_active = step_guide is not None and not step_guide.finished
+                    print(f"[{t:6.1f}s] {flow.phase:<7} {spoken}")
+            # corrections speak during the hold only; every other phase has its own script
+            guide_active = flow is not None and not flow.cues_allowed      # also after it has ended
 
             if ev is not None:
                 # CueEngine hands off to the coach whenever the coach still has
@@ -716,7 +730,10 @@ def run_live(args) -> int:
             # Without a fallback the last message just sits there, which is how
             # "no body detected" ended up printed over a body being scored.
             if t >= ps.banner_until:
-                ps.banner = _idle_banner(ev, state, asana)
+                if flow is not None and not flow.cues_allowed and flow.last_line:
+                    ps.banner = flow.last_line          # keep the current instruction up, not an old correction
+                else:
+                    ps.banner = _idle_banner(ev, state, asana)
 
             if sm.just_completed:
                 last = sm.stats.holds[-1]
@@ -738,6 +755,8 @@ def run_live(args) -> int:
                     # the last entry.
                     step_index = (len(ps.journey) - 1 if coach.resting
                                   else min(coach.index, len(SEQUENCE) - 1))
+                elif ps.flow is not None:
+                    step_index = min(ps.flow.index, len(ps.journey) - 1)
                 else:
                     # Scoring mode has only the two stages it actually runs.
                     step_index = 1 if coach.resting else 0
@@ -746,9 +765,12 @@ def run_live(args) -> int:
                     draw_rest_panel(frame, coach.rest_remaining, coach.rest_target_s)
                 elif not ps.guided:
                     small = (clip.render(CARD_W - 28, DEMO_BOX_H, t, compact=True) if clip else None)
-                    draw_pose_guide(frame, ps.guide_photo, ps.guide_name, asana.sanskrit, ps.guide_steps,
-                                    current=(step_guide.index if step_guide else None),
-                                    done=bool(step_guide and step_guide.finished), demo_img=small)
+                    if flow is not None and flow.show_report:
+                        draw_angle_report(frame, flow.report, flow.avg, flow.last_line)
+                    else:
+                        draw_pose_guide(frame, ps.guide_photo, ps.guide_name, asana.sanskrit, ps.guide_steps,
+                                        current=(flow.step_current if flow else None),
+                                        done=bool(flow and flow.steps_done), demo_img=small)
                 else:
                     # While holding, cycle the card between the two accepted
                     # arm forms so the practitioner can see both are allowed.
@@ -841,9 +863,12 @@ def run_live(args) -> int:
             elif action == "pose_locked":
                 print("this session is locked to one pose (started from a routine)")
 
-            if (getattr(args, "stop_after_hold", False) and ps.done_at is not None
-                    and t - ps.done_at > 3.0):                # let "well held" register
-                break
+            if getattr(args, "stop_after_hold", False):
+                if ps.flow is not None:                       # the whole sequence, then move on
+                    if ps.flow.finished and t - ps.flow.finished_at > 4.0:
+                        break
+                elif ps.done_at is not None and t - ps.done_at > 3.0:   # let "well held" register
+                    break
             if key == ord("g"):
                 args.no_guide = not args.no_guide
                 print("guide " + ("off" if args.no_guide else "on"))

@@ -36,7 +36,7 @@ from yoga.overlay import (CARD_W, DEMO_BOX_H, draw_framing_panel, draw_hud,  # n
                           draw_pose_guide, draw_skeleton, draw_step_panel, draw_toolbar)
 from yoga.state_machine import PoseStateMachine, State           # noqa: E402
 
-W, H, DT, SECONDS = 1280, 720, 0.1, 30.0
+W, H, DT, SECONDS = 1280, 720, 0.1, 45.0
 
 
 def canvas_from(photo: np.ndarray) -> np.ndarray:
@@ -93,7 +93,7 @@ def check_pose(tracker, key: str, out_dir: str) -> dict:
     info = routines.POSES[key]
     clip = demo.clip(key) if demo.available() else None
     draw_pose_guide(frame, canvas_from(photo)[:, :], info.name, info.sanskrit,
-                    tuple(s.text for s in guide.steps) if guide else info.steps,
+                    tuple(s.label for s in guide.steps) if guide else info.steps,
                     current=guide.index if guide else None, done=bool(guide and guide.finished),
                     demo_img=clip.render(CARD_W - 28, DEMO_BOX_H, 4.5, compact=True) if clip else None)
     draw_toolbar(frame, f"{info.name}  ({info.sanskrit})", True, True, False)

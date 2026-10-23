@@ -33,6 +33,7 @@ from yoga import profile as prof                                  # noqa: E402
 from yoga import routines as rt                                   # noqa: E402
 from yoga import demo as demo_lib                                 # noqa: E402
 from yoga import llm                                              # noqa: E402
+from yoga import instructions                                     # noqa: E402
 from yoga import ui                                               # noqa: E402
 from yoga.theme import TOKENS as T                                # noqa: E402
 
@@ -87,6 +88,8 @@ class App(tk.Tk):
         self._lib_back = None                #: where the pose library's Back button goes
         self._plan_from = None               #: where the plan's Back button goes
         self._practice_back = None           #: where the first pose's Back button goes
+        self._settings_back = None           #: where the Settings screen's Back button goes
+        self._test_seq = 0                   #: numbers the connection tests so a late one is ignored
         try:
             with open(os.path.join(GALLERY, "credits.json"), encoding="utf-8") as fh:
                 self.credits = json.load(fh)
@@ -160,9 +163,11 @@ class App(tk.Tk):
                   "side").pack(fill="x")
         ui.button(inner, "Pose library", lambda: self._leave(self.open_library),
                   "side").pack(fill="x", pady=(ui.px(6), 0))
+        ui.button(inner, "Settings", lambda: self._leave(self.show_settings), "side").pack(
+            fill="x", pady=(ui.px(6), 0))
         ui.button(inner, "Contribute samples", self.open_collect, "side").pack(
             fill="x", pady=(ui.px(6), ui.px(14)))
-        ui.label(inner, "Your data never leaves this computer.\nGeneral wellness guidance,\nnot medical advice.",
+        ui.label(inner, "Video and body data never leave\nthis computer. Optional online\nwording sends only short text.\nWellness guidance, not medical advice.",
                  "small", bg="card", justify="left").pack(anchor="w")
 
     def _nav(self, step: int) -> None:
@@ -195,6 +200,9 @@ class App(tk.Tk):
             bits = [f"ID {p.user_id}" if p.user_id else "", f"BMI {p.bmi:.1f} ({p.bmi_band})"]
             ui.label(self.status, "\n".join(b for b in bits if b), "mono", bg="card",
                      justify="left").pack(anchor="w", pady=(2, 0))
+        word = {"on": "on", "off": "off", "nokey": "no key"}[llm.status()]
+        ui.label(self.status, "online wording: " + word, "small", bg="card").pack(
+            anchor="w", pady=(ui.px(8), 0))
 
     def _nav_go(self, i: int) -> None:
         if i == 0:
@@ -346,6 +354,170 @@ class App(tk.Tk):
             subprocess.Popen([exe, os.path.join(HERE, "collect.py")], cwd=HERE)
         except OSError as exc:
             self.flash(f"Could not open the sample collector: {exc}", "bad")
+
+    # ------------------------------------------------------------- settings
+    def show_settings(self) -> None:
+        """Online wording (Groq): paste the key, test it, switch it on or off."""
+        self._settings_back = self._here or (self.show_profile, "Profile")
+        b = self._screen(-1, "Settings", "Optional. The app works fully without any of this.")
+
+        top = ui.Card(b, "card")
+        top.pack(fill="x", pady=(ui.px(8), ui.px(14)))
+        ui.label(top.body, "online wording (groq)", "cap", bg="card").pack(anchor="w")
+        self.set_status = ui.frame(top.body, "card")
+        self.set_status.pack(fill="x", pady=(ui.px(8), ui.px(8)))
+        ui.label(top.body, "It rewords two texts in friendlier language: the explanation under Ask the "
+                           "coach and the coach's note on the session summary. Nothing else changes. "
+                           "Poses are still scored from joint angles, and the live spoken cues keep "
+                           "the built-in wording.", "muted", bg="card", fit=True).pack(fill="x")
+        ui.label(top.body, "Only that short text is sent, with e-mail addresses, phone numbers, links "
+                           "and your name removed. Never video, pictures, body landmarks, your user ID "
+                           "or your medication.", "small", bg="card", fit=True).pack(
+            fill="x", pady=(ui.px(6), ui.px(10)))
+        self.online_var = tk.BooleanVar(value=(llm.status() == "on"))
+        ui.Toggle(top.body, "Use online wording", self.online_var, command=self._toggle_online,
+                  bg="card").pack(anchor="w")
+
+        box = ui.Card(b, "card")
+        box.pack(fill="x", pady=(0, ui.px(14)))
+        ui.label(box.body, "groq api key", "cap", bg="card").pack(anchor="w")
+        row = ui.frame(box.body, "card")
+        row.pack(fill="x", pady=(ui.px(8), ui.px(4)))
+        self.key_var = tk.StringVar()
+        self.key_entry = ui.entry(row, self.key_var, 52)
+        self.key_entry.configure(show="\u2022")
+        self.key_entry.pack(side="left", fill="x", expand=True, ipady=ui.px(7))
+        ui.button(row, "Paste", self._paste_key, "ghost").pack(side="left", padx=(ui.px(10), 0))
+        self.show_key = tk.BooleanVar(value=False)
+        ui.Toggle(box.body, "Show the key", self.show_key, command=self._toggle_show_key,
+                  bg="card").pack(anchor="w", pady=(ui.px(4), ui.px(10)))
+        btns = ui.frame(box.body, "card")
+        btns.pack(fill="x")
+        ui.button(btns, "Save and connect", self._save_key, "primary").pack(side="left")
+        ui.button(btns, "Test connection", self._test_key).pack(side="left", padx=(ui.px(10), 0))
+        ui.button(btns, "Get a free key", self._open_key_page, "ghost").pack(side="left", padx=(ui.px(10), 0))
+        ui.button(btns, "Remove key", self._remove_key, "ghost").pack(side="right")
+        ui.label(box.body, "The key is stored in the file .env next to launcher.py on this computer. "
+                           "That file is git-ignored and never uploaded. A Windows environment variable "
+                           "called GROQ_API_KEY, if you have one, takes priority over the file.",
+                 "small", bg="card", fit=True).pack(fill="x", pady=(ui.px(12), 0))
+
+        back = self._settings_back
+        self.back_btn(back[0], f"\u2190  {back[1]}")
+        self._refresh_settings()
+
+    def _refresh_settings(self) -> None:
+        ui.clear(self.set_status)
+        st = llm.status()
+        kind, word = {"on": ("good", "on"), "off": ("muted", "switched off"),
+                      "nokey": ("warn", "no key yet")}[st]
+        ui.pill(self.set_status, word, kind, bg="card").pack(side="left")
+        if st == "nokey":
+            line = "No key saved. The app uses its built-in wording."
+        else:
+            src = "the .env file" if llm.key_source() == "file" else "a Windows environment variable"
+            line = f"Key {llm.mask(os.environ.get('GROQ_API_KEY', ''))} from {src}."
+            if st == "on":
+                line += f" Model: {llm.groq_model()}."
+        ui.label(self.set_status, line, "muted", bg="card", fit=True).pack(
+            side="left", fill="x", expand=True, padx=(ui.px(10), 0))
+        self.online_var.set(st == "on")
+        self._nav(-1)                                   # the sidebar line follows
+
+    def _toggle_show_key(self) -> None:
+        self.key_entry.configure(show="" if self.show_key.get() else "\u2022")
+
+    def _paste_key(self) -> None:
+        try:
+            text = llm.clean_key(self.clipboard_get())
+        except tk.TclError:
+            text = ""
+        if not text:
+            self.flash("The clipboard is empty. Copy the key from the Groq page first.", "warn")
+            return
+        self.key_var.set(text)
+        self.flash("Pasted. Press Save and connect.", "good")
+
+    def _open_key_page(self) -> None:
+        try:
+            import webbrowser
+            webbrowser.open("https://console.groq.com/keys")
+        except Exception:
+            self.flash("Open https://console.groq.com/keys in your browser, sign in and create a key.", "warn")
+            return
+        self.flash("Groq's key page is open in your browser. Sign in, press Create API Key, "
+                   "copy the key, then come back and press Paste.", "good")
+
+    def _save_key(self) -> None:
+        key = llm.clean_key(self.key_var.get())
+        problem = llm.key_problem(key)
+        if problem:
+            self.flash(problem, "warn")
+            return
+        try:
+            llm.save_settings(key=key, online=True)
+        except OSError as exc:
+            self.flash(f"Could not save the key: {exc}", "bad")
+            return
+        self.key_var.set("")
+        self._refresh_settings()
+        note = "" if key.startswith("gsk_") else " (Groq keys normally start with gsk_)"
+        self.flash("Key saved on this computer" + note + ". Testing the connection...", "good")
+        self._run_test(None)
+
+    def _test_key(self) -> None:
+        key = llm.clean_key(self.key_var.get())
+        if key:
+            problem = llm.key_problem(key)
+            if problem:
+                self.flash(problem, "warn")
+                return
+        elif not llm.has_key():
+            self.flash("Paste your Groq key first.", "warn")
+            return
+        self.flash("Testing the connection...", "good")
+        self._run_test(key or None)
+
+    def _run_test(self, key) -> None:
+        self._test_seq += 1
+        seq = self._test_seq
+
+        def finish(res) -> None:
+            if seq != self._test_seq or not self.key_entry.winfo_exists():
+                return                                  # a newer test, or the screen was left
+            ok, msg = res if res else (False, "The connection test failed.")
+            self.flash(msg, "good" if ok else "bad")
+
+        self._bg(lambda: llm.check_connection(key), finish)
+
+    def _toggle_online(self) -> None:
+        want = bool(self.online_var.get())
+        if want and not llm.has_key():
+            self.online_var.set(False)
+            self.flash("Save a Groq key first, then switch it on.", "warn")
+            return
+        try:
+            llm.save_settings(online=want)
+        except OSError as exc:
+            self.flash(f"Could not save the setting: {exc}", "bad")
+            self._refresh_settings()
+            return
+        self._refresh_settings()
+        self.flash("Online wording is on." if want else
+                   "Online wording is off. The app uses its built-in wording and sends nothing.", "good")
+
+    def _remove_key(self) -> None:
+        if not llm.has_key():
+            self.flash("No key is saved.", "warn")
+            return
+        try:
+            llm.save_settings(key="")
+        except OSError as exc:
+            self.flash(f"Could not remove the key: {exc}", "bad")
+            return
+        self.key_var.set("")
+        self._refresh_settings()
+        self.flash("The key was removed from this computer.", "good")
 
     # ------------------------------------------------------ 1. the profile
     def show_profile(self) -> None:
@@ -526,6 +698,9 @@ class App(tk.Tk):
         if llm.enabled():
             ui.label(box.body, llm.describe(), "small", bg="card", fit=True).pack(
                 fill="x", pady=(ui.px(2), 0))
+        else:
+            ui.button(box.body, "Set up online wording (optional)  →", self.show_settings,
+                      "ghost").pack(anchor="w", pady=(ui.px(6), 0))
         self.ask_out = ui.frame(box.body, "card")
         self.ask_out.pack(fill="x")
         self.ask_entry.bind("<Return>", lambda _e: (self._ask(), "break")[1])
@@ -940,12 +1115,28 @@ class App(tk.Tk):
         box.bind("<<ComboboxSelected>>", lambda _e: self._change_pose(names[chosen.get()], pose.key, chosen),
                  add="+")
 
-        ui.label(right, "get ready", "cap").pack(anchor="w", pady=(ui.px(18), 0))
-        for i, st in enumerate(pose.steps, 1):
+        how = instructions.howto(pose.key)
+        if how:
+            ui.label(right, how.camera, "small", fit=True).pack(fill="x", pady=(ui.px(14), 0))
+            seq = instructions.sequence(pose.key)
+            if seq:
+                ui.label(right, seq, "small", fit=True).pack(fill="x", pady=(ui.px(6), 0))
+        ui.label(right, "how to do it", "cap").pack(anchor="w", pady=(ui.px(16), 0))
+        for i, st in enumerate(how.steps if how else pose.steps, 1):
             row = ui.frame(right)
-            row.pack(fill="x", pady=(ui.px(10), 0))
+            row.pack(fill="x", pady=(ui.px(8), 0))
             ui.label(row, f"{i}", "mono_text").pack(side="left", anchor="n", padx=(0, ui.px(12)))
             ui.label(row, st, "body", fit=True).pack(side="left", fill="x", expand=True)
+        if how:
+            ui.label(right, "breathing and time", "cap").pack(anchor="w", pady=(ui.px(18), 0))
+            ui.label(right, how.breath, "body", fit=True).pack(fill="x", pady=(ui.px(6), 0))
+            ui.label(right, "common mistakes", "cap").pack(anchor="w", pady=(ui.px(18), 0))
+            for m in how.mistakes:
+                ui.label(right, "-  " + m, "muted", fit=True).pack(fill="x", pady=(ui.px(4), 0))
+            ui.label(right, "coming out", "cap").pack(anchor="w", pady=(ui.px(18), 0))
+            ui.label(right, how.release, "body", fit=True).pack(fill="x", pady=(ui.px(6), 0))
+            if how.careful:
+                ui.label(right, "Take care: " + how.careful, "warn", fit=True).pack(fill="x", pady=(ui.px(10), 0))
         info = ui.frame(right)
         info.pack(fill="x", pady=(ui.px(18), 0))
         ui.pill(info, mode, kind).pack(side="left")
@@ -972,7 +1163,7 @@ class App(tk.Tk):
                   "ghost").pack(side="left", padx=ui.px(10))
         self._go = self.next_btn("I'm ready — start  →", lambda: self._begin(pose, item))
         self.bind("<Return>", lambda _e: self._begin(pose, item))
-        self.say(f"Next: {pose.name}. " + " ".join(pose.steps))
+        self.say(f"Next: {pose.name}. Read the steps on the screen, or press Play audio to hear them.")
 
     # ------------------------------------------------------ the demo video + audio
     def _demo_card(self, parent: tk.Misc, key: str, size: int) -> ui.Card:
@@ -1008,8 +1199,7 @@ class App(tk.Tk):
             try:
                 from PIL import Image, ImageTk
                 t = time.perf_counter() - state["t0"]
-                steps = rt.POSES[clip.key].steps
-                frame = clip.render(size, size, t, caption=steps[min(len(steps) - 1, clip.step(t))],
+                frame = clip.render(size, size, t, caption=instructions.demo_caption(clip.key, clip.step(t)),
                                     title=rt.POSES[clip.key].sanskrit.upper())
                 im = ImageTk.PhotoImage(Image.fromarray(frame[:, :, ::-1]))
                 label.configure(image=im)
@@ -1022,7 +1212,7 @@ class App(tk.Tk):
         if not self.voice.get():
             self.voice.set(True)                     # asking to hear it turns the voice on
         self.hush()
-        self.say(f"{pose.name}. " + " ".join(pose.steps))
+        self.say(f"{pose.name}. " + (instructions.spoken(pose.key) or " ".join(pose.steps)))
 
     def _change_pose(self, new_key: str, old_key: str, var: tk.StringVar) -> None:
         """Swap the pose on the get-ready screen for another one, keeping the profile's rules."""

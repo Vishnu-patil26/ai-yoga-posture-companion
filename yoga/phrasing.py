@@ -152,7 +152,10 @@ def spoken_phrase(result: CheckResult, level: str, features: dict,
     # screen in the banner, where reading it costs nothing.
     hw = handwidths(result, features)
     qualifier = _bucket(hw, _HAND_WIDTH_WORDS) if hw is not None else severity_word(result)
-    return f"{short_cue(result).rstrip('.')} - {qualifier}."
+    short = short_cue(result).rstrip(".")
+    if qualifier.lower() in short.lower():          # "Rise a little" already says how much
+        return f"{short}."
+    return f"{short} - {qualifier}."
 
 
 # =============================================================================

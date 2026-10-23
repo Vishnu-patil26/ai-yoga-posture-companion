@@ -227,6 +227,116 @@ llm.session_note([{"pose": "Mountain Pose", "result": "held 20 s for Asha, asha@
 check("Asha" not in seen["user"].replace("[name]", "") and "@" not in seen["user"],
       "session: the name and e-mail never reach the provider")
 
+# ------------------------------------------------- settings written from the app
+saved_env = {k: os.environ.get(k) for k in ("GROQ_API_KEY", "YOGA_LLM")}
+os.environ.pop("GROQ_API_KEY", None)
+os.environ.pop("YOGA_LLM", None)
+GOOD = "gsk_" + "k" * 40
+check(llm.key_problem("") != "" and llm.key_problem("   ") != "", "settings: an empty key is refused")
+check(llm.key_problem("gsk_abc def" + "x" * 20) != "", "settings: a key with a space is refused")
+check(llm.key_problem("gsk_short") != "", "settings: a too short key is refused")
+check(llm.key_problem(GOOD) == "", "settings: a normal key is accepted")
+check(llm.clean_key('  "' + GOOD + "'  ") == GOOD, "settings: quotes and spaces around a pasted key are removed")
+check(llm.mask(GOOD) == "gsk_...kkkk" and GOOD not in llm.mask(GOOD), "settings: the key is masked to its ends")
+check(llm.mask("abc") == "***", "settings: a very short key is hidden completely")
+check(llm.status() == "nokey" and not llm.has_key(), "settings: no key -> status nokey")
+
+with tempfile.TemporaryDirectory() as d:
+    p = os.path.join(d, ".env")
+    llm.save_settings(key=GOOD, online=True, path=p)
+    text = open(p, encoding="utf-8").read()
+    check(text.splitlines()[0].startswith("#") and f"GROQ_API_KEY={GOOD}" in text and "YOGA_LLM=on" in text,
+          "settings: a new .env gets a header, the key and the switch")
+    check(os.environ.get("GROQ_API_KEY") == GOOD and llm.status() == "on" and llm.enabled(),
+          "settings: saving takes effect in this process at once")
+    check(llm.key_source(p) == "file", "settings: key_source says the file when the file holds the key")
+    os.environ["GROQ_API_KEY"] = "gsk_" + "z" * 40
+    check(llm.key_source(p) == "environment", "settings: key_source says environment when it differs from the file")
+    os.environ["GROQ_API_KEY"] = GOOD
+
+    llm.save_settings(online=False, path=p)
+    check("YOGA_LLM=off" in open(p, encoding="utf-8").read() and llm.status() == "off" and not llm.enabled(),
+          "settings: switching off keeps the key but disables the wording")
+    check(llm.complete("hello") is None, "settings: switched off -> complete() makes no call")
+
+    with open(p, "w", encoding="utf-8") as fh:
+        fh.write("# mine\nOTHER=1\nGROQ_API_KEY=old\nYOGA_LLM=off\nGROQ_API_KEY=dup\n")
+    llm.save_settings(key=GOOD, online=True, path=p)
+    lines = open(p, encoding="utf-8").read().splitlines()
+    check(lines.count("# mine") == 1 and "OTHER=1" in lines, "settings: comments and other settings are kept")
+    check(sum(1 for x in lines if x.startswith("GROQ_API_KEY=")) == 1 and f"GROQ_API_KEY={GOOD}" in lines,
+          "settings: duplicate key lines collapse to one with the new value")
+    check(sum(1 for x in lines if x.startswith("YOGA_LLM=")) == 1 and "YOGA_LLM=on" in lines,
+          "settings: the switch line is replaced, not repeated")
+
+    llm._hold_off("groq", 3600.0)
+    llm.save_settings(key=GOOD, path=p)
+    check(not llm._cooling("groq"), "settings: saving a key ends the one-hour wait after a refused key")
+
+    llm.save_settings(key="", path=p)
+    after = open(p, encoding="utf-8").read()
+    check("GROQ_API_KEY" not in after and "OTHER=1" in after, "settings: removing the key deletes only its line")
+    check("GROQ_API_KEY" not in os.environ and llm.status() == "nokey", "settings: removing the key clears it here too")
+
+    bad = os.path.join(d, "missing_folder", ".env")
+    os.environ["GROQ_API_KEY"] = GOOD
+    try:
+        llm.save_settings(key="gsk_" + "n" * 40, path=bad)
+        raised = False
+    except OSError:
+        raised = True
+    check(raised and os.environ["GROQ_API_KEY"] == GOOD, "settings: an unwritable file raises and changes nothing")
+    os.environ.pop("GROQ_API_KEY", None)
+
+# the connection test, with the network call replaced
+real_post = llm._post_json
+sent = {}
+
+
+def fake_ok(url, payload, headers, timeout):
+    sent.update(url=url, headers=headers, payload=payload)
+    return {"choices": [{"message": {"content": "ok"}}]}
+
+
+def raiser(exc):
+    def f(url, payload, headers, timeout):
+        raise exc
+    return f
+
+
+def http(code):
+    return urllib.error.HTTPError("https://x", code, "x", {}, io.BytesIO(b""))
+
+
+try:
+    llm._post_json = fake_ok
+    ok, msg = llm.check_connection(GOOD)
+    check(ok and msg.startswith("Connected") and sent["headers"].get("Authorization") == f"Bearer {GOOD}",
+          "connection test: a good answer says connected and sends the typed key")
+    check(sent["payload"].get("max_completion_tokens", 0) <= 400 and "api.groq.com" in sent["url"],
+          "connection test: one small call to Groq")
+    check(GOOD not in msg, "connection test: the message never repeats the key")
+    ok, msg = llm.check_connection(None)
+    check(not ok and "no key" in msg.lower(), "connection test: nothing to test without a key")
+    os.environ["GROQ_API_KEY"] = GOOD
+    check(llm.check_connection()[0], "connection test: with no argument it tests the saved key")
+    for exc, want_ok, word in ((http(401), False, "did not accept"), (http(403), False, "did not accept"),
+                               (http(429), True, "valid"), (http(404), False, "no model"),
+                               (http(500), False, "error"), (urllib.error.URLError("down"), False, "reach"),
+                               (TimeoutError("slow"), False, "failed")):
+        llm._post_json = raiser(exc)
+        ok, msg = llm.check_connection(GOOD)
+        check(ok is want_ok and word in msg.lower(), f"connection test: {type(exc).__name__} {getattr(exc, 'code', '')} -> {word}")
+    llm._cooldown.clear()
+    check(not llm._cooling("groq"), "connection test: a failed test does not put the wording on hold")
+finally:
+    llm._post_json = real_post
+    for k, v in saved_env.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
+
 # ------------------------------------------------------------------- live (opt in)
 if "--live" in sys.argv:
     os.environ.pop("GROQ_API_KEY", None)

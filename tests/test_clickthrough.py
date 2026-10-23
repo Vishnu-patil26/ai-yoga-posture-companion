@@ -197,7 +197,29 @@ def restore_guided(win) -> None:
         win._saved_fit = None
 
 
-SCREENS = {"profile": at_profile, "routines": at_routines, "library": at_library, "plan": at_plan,
+def wait_for(win, cond, seconds: float = 6.0) -> bool:
+    """Pump the Tk event loop until ``cond()`` is true (a background thread is working)."""
+    import time
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        win.update()
+        if cond():
+            return True
+        time.sleep(0.03)
+    win.update()
+    return bool(cond())
+
+
+def at_settings(win) -> None:
+    """The Settings screen with a key already saved (in a temporary .env)."""
+    reset(win)
+    from yoga import llm
+    llm.save_settings(key="gsk_" + "c" * 40, online=True)
+    win.show_settings()
+    settle(win)
+
+
+SCREENS = {"settings": at_settings, "profile": at_profile, "routines": at_routines, "library": at_library, "plan": at_plan,
            "pose 1": at_pose1, "pose 2": at_pose2, "summary": at_summary, "guided pose": at_guided}
 
 
@@ -454,6 +476,128 @@ def part_tuned(win) -> None:
     check(not win._tuned_on, "the Tuned poses switch turns OFF again")
 
 
+def part_settings(win, opened) -> None:
+    """The Settings screen: paste, save, test, switch, remove, and the ways in and out."""
+    from yoga import llm
+    print("  part 4: the settings screen")
+
+    def sidebar_words() -> str:
+        return " ".join(norm(w.cget("text")) for w in widgets(win.status) if isinstance(w, tk.Label))
+
+    def status_words() -> str:
+        # the pill prints its word in capitals, so compare in lower case
+        return " ".join(norm(w.cget("text")) for w in widgets(win.set_status) if isinstance(w, tk.Label)).lower()
+
+    def flash_words() -> str:
+        return " ".join(norm(w.cget("text")) for w in widgets(win.flash_box) if isinstance(w, tk.Label))
+
+    def env_text() -> str:
+        try:
+            return open(llm.ENV_PATH, encoding="utf-8").read()
+        except OSError:
+            return ""
+
+    llm.save_settings(key="")
+    os.environ.pop("YOGA_LLM", None)
+    try:
+        os.remove(llm.ENV_PATH)
+    except OSError:
+        pass
+    at_profile(win)
+    check("Settings" in button_texts(win, "side"), "a Settings button sits in the sidebar")
+    check("online wording: no key" in sidebar_words(), "the sidebar says there is no key yet")
+    click(win, "Settings", "side")
+    check(title(win) == "Settings", "the sidebar Settings button opens the settings")
+    check("\u2190 Profile" in button_texts(win, "foot"), "Back on Settings names where it goes")
+    check("no key yet" in status_words(), "the settings say no key yet")
+    for want in ("Save and connect", "Test connection", "Get a free key", "Remove key", "Paste"):
+        check(want in button_texts(win, "page"), f"settings has a '{want}' button")
+
+    click(win, "Save and connect", "page")
+    check("Paste your Groq key" in flash_words() and not env_text(), "saving an empty key explains and writes nothing")
+    click(win, "Test connection", "page")
+    check("Paste your Groq key" in flash_words(), "testing with no key explains")
+    tog = [w for w in widgets(win.page) if isinstance(w, ui.Toggle) and w.lbl.cget("text") == "Use online wording"][0]
+    tog._click()
+    check(not win.online_var.get() and "Save a Groq key first" in flash_words(), "switching on without a key is refused")
+    win.key_var.set("gsk_has a space" + "x" * 20)
+    click(win, "Save and connect", "page")
+    check("no spaces" in flash_words() and not env_text(), "a key with a space is refused and not written")
+
+    # the show-the-key switch
+    shown = [w for w in widgets(win.page) if isinstance(w, ui.Toggle) and w.lbl.cget("text") == "Show the key"][0]
+    check(str(win.key_entry.cget("show")) != "", "the key is hidden by default")
+    shown._click()
+    check(str(win.key_entry.cget("show")) == "", "Show the key reveals it")
+    shown._click()
+    check(str(win.key_entry.cget("show")) != "", "and hides it again")
+
+    # paste from the clipboard (stand-in, so the real clipboard is left alone)
+    good = "gsk_" + "p" * 40
+    win.clipboard_get = lambda: "  " + good + "\n"
+    click(win, "Paste", "page")
+    check(win.key_var.get() == good, "Paste puts the clipboard text in the box, cleaned")
+    win.clipboard_get = lambda: (_ for _ in ()).throw(tk.TclError("empty"))
+    win.key_var.set("")
+    click(win, "Paste", "page")
+    check("clipboard is empty" in flash_words(), "Paste with an empty clipboard says so")
+
+    # save and connect
+    win.key_var.set(good)
+    click(win, "Save and connect", "page")
+    check(f"GROQ_API_KEY={good}" in env_text() and "YOGA_LLM=on" in env_text(), "Save and connect writes the key to .env")
+    check(llm.status() == "on" and win.key_var.get() == "", "the key is live at once and the box is cleared")
+    check("on" in status_words() and "gsk_...pppp" in status_words() and good not in status_words(),
+          "the status shows the masked key, never the whole key")
+    check("online wording: on" in sidebar_words(), "the sidebar line follows")
+    check(wait_for(win, lambda: "Connected" in flash_words()), "the connection test result appears by itself")
+    check(win.online_var.get(), "the switch is on")
+
+    # test with a typed key that is wrong
+    win.key_var.set("gsk_bad" + "b" * 40)
+    click(win, "Test connection", "page")
+    check(wait_for(win, lambda: "did not accept" in flash_words()), "a wrong key is reported by Test connection")
+    check(f"GROQ_API_KEY={good}" in env_text(), "testing a typed key does not save it")
+    win.key_var.set("")
+
+    # switch off and on
+    tog._click()
+    check(llm.status() == "off" and "YOGA_LLM=off" in env_text(), "switching the wording off is saved")
+    check("switched off" in status_words() and "online wording: off" in sidebar_words(), "the screen and sidebar show it")
+    tog._click()
+    check(llm.status() == "on" and "YOGA_LLM=on" in env_text(), "switching it on again is saved")
+
+    # the key page
+    click(win, "Get a free key", "page")
+    check(opened and "console.groq.com/keys" in opened[-1], "Get a free key opens Groq's key page")
+
+    # remove
+    click(win, "Remove key", "page")
+    check(llm.status() == "nokey" and "GROQ_API_KEY" not in env_text(), "Remove key deletes it from the file and from memory")
+    check("no key yet" in status_words() and "online wording: no key" in sidebar_words(), "and the screen says so")
+    click(win, "Remove key", "page")
+    check("No key is saved" in flash_words(), "removing again explains")
+
+    # in and out
+    click(win, "\u2190 Profile")
+    check(title(win) == "Tell us about you", "Back from Settings -> where it was opened")
+    at_routines(win)
+    check("Set up online wording (optional) \u2192" in button_texts(win, "page"), "the routine screen offers to set the wording up")
+    click(win, "Set up online wording", "page")
+    check(title(win) == "Settings" and "\u2190 Routines" in button_texts(win, "foot"), "that button opens Settings, Back names Routines")
+    click(win, "\u2190 Routines")
+    check(title(win).startswith("Hello Asha"), "Back -> the routine screen")
+    llm.save_settings(key="gsk_" + "q" * 40, online=True)
+    at_routines(win)
+    check("Set up online wording (optional) \u2192" not in button_texts(win, "page"), "with the wording on, that button is gone")
+    llm.save_settings(key="")
+    at_pose2(win)
+    click(win, "Settings", "side")
+    check(title(win) == "Session summary", "Settings half-way through a routine keeps the session first")
+    click(win, "Home", "head")
+    no_errors("the settings screen")
+
+
 # ======================================================================= part 2
 def sweep(win) -> None:
     print("  part 2: every control on every screen, once, from a fresh screen")
@@ -528,10 +672,27 @@ def main() -> int:
         "".join(traceback.format_exception(et, ev, tb)))
     win.say = lambda text: SAID.append(text)                  # no real voice in a test
     calls = fake_camera(trainer)
+    from yoga import llm
+    import webbrowser
+    saved_env = {k: os.environ.get(k) for k in ("GROQ_API_KEY", "YOGA_LLM")}
+    real_llm = (llm.ENV_PATH, llm.check_connection, llm.complete, webbrowser.open)
+    llm.ENV_PATH = os.path.join(tempfile.mkdtemp(), ".env")        # never the developer's real key file
+    os.environ.pop("GROQ_API_KEY", None)
+    opened: list[str] = []
+
+    def fake_check(key=None):
+        if key and "bad" in key:
+            return False, "Groq did not accept this key. Check that it was copied completely."
+        return True, "Connected. stand-in answered in 0.1 s."
+
+    llm.check_connection = fake_check
+    llm.complete = lambda *a, **k: None                              # no network call, ever
+    webbrowser.open = lambda url, *a, **k: opened.append(url) or True
     try:
         win.update()
         part_one(win, trainer, calls)
         part_tuned(win)
+        part_settings(win, opened)
         sweep(win)
         # Quit last: it destroys the window
         at_profile(win)
@@ -547,6 +708,12 @@ def main() -> int:
     finally:
         trainer.run_live = real_run
         prof.USERS_DIR = old_dir
+        llm.ENV_PATH, llm.check_connection, llm.complete, webbrowser.open = real_llm
+        for k, v in saved_env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
         try:
             win.destroy()
         except tk.TclError:

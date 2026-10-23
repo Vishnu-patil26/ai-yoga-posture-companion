@@ -5,7 +5,8 @@ routine is chosen by ``yoga.nlp`` and every sentence has a template version.
 This module only offers a nicer rewording of two things, and only when a Groq
 key is available (free tier, model ``openai/gpt-oss-20b``).  The key is read
 from ``GROQ_API_KEY``, in the environment or in a git-ignored ``.env`` file in
-the project root.  Without a key, or when Groq is slow, rate-limited or
+the project root; the launcher's Settings screen writes that file for you (it
+saves the key, switches the wording on or off and tests the connection).  Without a key, or when Groq is slow, rate-limited or
 unreachable, the caller keeps the template text it already has.  There is no
 local model: a teammate's laptop only needs the key.
 
@@ -38,6 +39,7 @@ import urllib.request
 from dataclasses import dataclass
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ENV_PATH = os.path.join(ROOT, ".env")          #: where the Settings screen keeps the key
 
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL = "openai/gpt-oss-20b"
@@ -59,7 +61,7 @@ SYSTEM = (
 # ---------------------------------------------------------------- settings
 def _load_env(path: str | None = None) -> None:
     """Read ``KEY=value`` lines from ``.env`` into ``os.environ`` (never overrides)."""
-    path = path or os.path.join(ROOT, ".env")
+    path = path or ENV_PATH
     try:
         with open(path, encoding="utf-8-sig") as fh:
             lines = fh.read().splitlines()
@@ -94,8 +96,141 @@ def describe() -> str:
     """One line for the interface: where the wording comes from."""
     if enabled():
         return (f"Wording by an online model ({groq_model()} on Groq). Your sentence is sent "
-                "without your name; set YOGA_LLM=off to stay offline.")
-    return "Template wording only (no Groq key set, or YOGA_LLM=off)."
+                "without your name; switch it off in Settings to stay offline.")
+    return "Template wording only (no Groq key set, or switched off in Settings)."
+
+
+# ------------------------------------------------- settings changed from the app
+def _read_env_lines(path: str) -> list[str]:
+    try:
+        with open(path, encoding="utf-8-sig") as fh:
+            return fh.read().splitlines()
+    except OSError:
+        return []
+
+
+def _file_value(name: str, path: str) -> str | None:
+    """The value of ``name`` in the .env file, or None."""
+    for line in _read_env_lines(path):
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            k, v = line.split("=", 1)
+            if k.strip() == name:
+                return v.strip().strip('"').strip("'")
+    return None
+
+
+def clean_key(key: str) -> str:
+    """A pasted key without the spaces or quotes that tend to come along."""
+    return (key or "").strip().strip('"').strip("'").strip()
+
+
+def key_problem(key: str) -> str:
+    """Why this text cannot be a Groq key, in plain words.  Empty when it looks fine."""
+    key = clean_key(key)
+    if not key:
+        return "Paste your Groq key first."
+    if re.search(r"\s", key):
+        return "A key has no spaces or line breaks. Paste only the key."
+    if len(key) < 20:
+        return "That is too short for a Groq key. Copy the whole key."
+    return ""
+
+
+def mask(key: str) -> str:
+    """``gsk_...a1b2``: enough to recognise a key, never the whole of it."""
+    key = clean_key(key)
+    return "*" * len(key) if len(key) <= 8 else f"{key[:4]}...{key[-4:]}"
+
+
+def has_key() -> bool:
+    return bool(_groq_key())
+
+
+def status() -> str:
+    """``on``, ``off`` (a key is saved but the wording is switched off) or ``nokey``."""
+    if not has_key():
+        return "nokey"
+    return "on" if enabled() else "off"
+
+
+def key_source(path: str | None = None) -> str:
+    """Where the key in use comes from: ``file`` (.env), ``environment`` or ``none``."""
+    key = _groq_key()
+    if not key:
+        return "none"
+    return "file" if _file_value("GROQ_API_KEY", path or ENV_PATH) == key else "environment"
+
+
+def save_settings(*, key: str | None = None, online: bool | None = None, path: str | None = None) -> None:
+    """Write the Groq key and or the on/off switch into ``.env`` and into this process.
+
+    ``key=""`` removes the key.  Other lines (comments, other settings) are kept.  A key
+    that was on hold after a refusal is tried again.  Raises ``OSError`` if the file
+    cannot be written, and then changes nothing."""
+    path = path or ENV_PATH
+    updates: dict[str, str] = {}
+    if key is not None:
+        updates["GROQ_API_KEY"] = clean_key(key)
+    if online is not None:
+        updates["YOGA_LLM"] = "on" if online else "off"
+    out: list[str] = []
+    seen: set[str] = set()
+    for line in _read_env_lines(path):
+        s = line.strip()
+        name = s.split("=", 1)[0].strip() if s and not s.startswith("#") and "=" in s else None
+        if name in updates:
+            if name not in seen and updates[name]:
+                out.append(f"{name}={updates[name]}")
+            seen.add(name)
+            continue
+        out.append(line)
+    for name, val in updates.items():
+        if name not in seen and val:
+            out.append(f"{name}={val}")
+    if not any(line.lstrip().startswith("#") for line in out):
+        out.insert(0, "# Local settings for AI Yoga Companion. Git-ignored: never share or upload this file.")
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write("\n".join(out).rstrip("\n") + "\n")
+    os.replace(tmp, path)
+    for name, val in updates.items():
+        if val:
+            os.environ[name] = val
+        else:
+            os.environ.pop(name, None)
+    with _lock:
+        _cooldown.pop("groq", None)
+
+
+def check_connection(key: str | None = None) -> tuple[bool, str]:
+    """Make one tiny call with ``key`` (or the saved key) and say in plain words what happened.
+
+    Never raises.  Meant for a background thread."""
+    key = clean_key(key) if key else _groq_key()
+    if not key:
+        return False, "There is no key to test."
+    t0 = time.monotonic()
+    try:
+        data = _post_json(GROQ_URL, {
+            "model": groq_model(),
+            "messages": [{"role": "user", "content": "Reply with the single word: ok"}],
+            "temperature": 0, "reasoning_effort": "low", "max_completion_tokens": 200,
+        }, {"Authorization": f"Bearer {key}"}, GROQ_TIMEOUT_S)
+        data["choices"][0]
+    except urllib.error.HTTPError as exc:
+        if exc.code in (401, 403):
+            return False, "Groq did not accept this key. Check that it was copied completely."
+        if exc.code == 429:
+            return True, "The key is valid, but the free limit is used up for the moment. Try again in a minute."
+        if exc.code == 404:
+            return False, f"Groq has no model called {groq_model()}."
+        return False, f"Groq answered with an error ({exc.code}). Try again in a minute."
+    except urllib.error.URLError:
+        return False, "Could not reach Groq. Check the internet connection."
+    except Exception:                                             # timeout, bad reply
+        return False, "The connection test failed. Check the internet connection and try again."
+    return True, f"Connected. {groq_model()} answered in {time.monotonic() - t0:.1f} s."
 
 
 # ------------------------------------------------------------- the calls
