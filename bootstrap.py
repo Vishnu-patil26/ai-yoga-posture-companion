@@ -340,6 +340,7 @@ TASKS = {
     "run": ["app.py"],
     "ui": ["launcher.py"],
     "flow": [os.path.join("tests", "test_flow.py")],
+    "clicks": [os.path.join("tests", "test_clickthrough.py")],
     "calibrate": ["app.py", "--calibrate"],
     "test": [os.path.join("tests", "selftest.py")],
     "demo": [os.path.join("tools", "session", "simulate_session.py")],

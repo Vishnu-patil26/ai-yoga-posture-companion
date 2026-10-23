@@ -11,6 +11,10 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# These checks must never reach the network, even when a Groq key is in .env.
+# The one test that exercises the language-model path turns it on with a fake model.
+os.environ["YOGA_LLM"] = "off"
+
 from yoga import asanas as asana_lib                              # noqa: E402
 from yoga import profile as prof                                  # noqa: E402
 from yoga import routines as rt                                   # noqa: E402
@@ -32,6 +36,31 @@ def base(**kw) -> prof.Profile:
              bp="None", job="sitting", diet="Vegetarian", location="Thane")
     d.update(kw)
     return prof.Profile(**d)
+
+
+def label_texts(widget) -> list[str]:
+    """The text of every labelled widget below ``widget`` (any depth)."""
+    out: list[str] = []
+    for child in widget.winfo_children():
+        try:
+            out.append(str(child.cget("text")))
+        except Exception:                                     # frames and canvases have no text
+            pass
+        out += label_texts(child)
+    return out
+
+
+def wait_for(app, cond, seconds: float = 6.0) -> bool:
+    """Pump the Tk event loop until ``cond()`` is true (the model call runs in a thread)."""
+    import time
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        app.update()
+        if cond():
+            return True
+        time.sleep(0.03)
+    app.update()
+    return bool(cond())
 
 
 def test_catalogue() -> None:
@@ -339,6 +368,43 @@ def test_launcher_ui() -> None:
         app.ask_var.set("")
         app._ask()
         check(len(app.ask_out.winfo_children()) == 1, "an empty question gets a prompt, not a crash")
+
+        # the optional language-model note, with a fake model in place of Groq
+        from yoga import llm
+        saved = (os.environ.get("YOGA_LLM"), os.environ.get("GROQ_API_KEY"), llm._call_groq)
+        try:
+            os.environ["YOGA_LLM"] = "on"
+            os.environ["GROQ_API_KEY"] = "gsk_" + "x" * 52
+            llm._cooldown.clear()
+            llm._call_groq = lambda s, u, m: "This routine suits your lower back and fits the 10 minutes you have."
+            app.ask_var.set("my lower back hurts and I only have 10 minutes")
+            app._ask()
+            check(any("writing a short note" in t for t in label_texts(app.ask_out)),
+                  "the template answer shows at once with a 'writing' placeholder")
+            wait_for(app, lambda: any("checked for safety" in t for t in label_texts(app.ask_out)))
+            check(any("suits your lower back" in t and "checked for safety" in t
+                      for t in label_texts(app.ask_out)), "a checked model note is added under the template answer")
+            check(any("Best match" in t for t in label_texts(app.ask_out)),
+                  "the template explanation is still there")
+
+            def broken(s, u, m):
+                raise OSError("offline")
+            llm._call_groq = broken
+            llm._cooldown.clear()
+            app.ask_var.set("my lower back hurts and I only have 10 minutes")
+            app._ask()
+            wait_for(app, lambda: not any("writing a short note" in t for t in label_texts(app.ask_out)))
+            check(not any("writing a short note" in t for t in label_texts(app.ask_out))
+                  and any("Best match" in t for t in label_texts(app.ask_out)),
+                  "when the model fails the placeholder goes and the template answer stays")
+        finally:
+            for k, v in (("YOGA_LLM", saved[0]), ("GROQ_API_KEY", saved[1])):
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+            llm._call_groq = saved[2]
+            llm._cooldown.clear()
         # the pose library: tick order, badges
         app.show_gallery()
         app.update()
@@ -452,6 +518,36 @@ def test_launcher_practice() -> None:
         with open(path, encoding="utf-8") as fh:
             entries = json.load(fh)
         check(len(entries) == 1, "showing the summary twice saves the session once")
+
+        # the coach's note can be reworded by the model; the template note shows first
+        from yoga import llm
+        saved = (os.environ.get("YOGA_LLM"), os.environ.get("GROQ_API_KEY"), llm._call_groq)
+        try:
+            os.environ["YOGA_LLM"] = "on"
+            os.environ["GROQ_API_KEY"] = "gsk_" + "x" * 52
+            llm._cooldown.clear()
+            llm._call_groq = lambda s, u, m: "A calm session today, and anything you skipped is fine."
+            app.show_summary()
+            check(any("Nice session" in t or "No poses" in t or "did not finish" in t or "completed" in t
+                      for t in label_texts(app)), "the template coach's note is on screen first")
+            wait_for(app, lambda: any("written by" in t for t in label_texts(app)))
+            check(any("A calm session today" in t for t in label_texts(app))
+                  and any("written by" in t for t in label_texts(app)),
+                  "the checked model note replaces the template note and says who wrote it")
+            llm._call_groq = lambda s, u, m: "Take 500 mg before the next session."
+            llm._cooldown.clear()
+            app.show_summary()
+            wait_for(app, lambda: False, 1.0)
+            check(not any("500 mg" in t for t in label_texts(app)),
+                  "an unsafe model note is dropped and the template note stays")
+        finally:
+            for k, v in (("YOGA_LLM", saved[0]), ("GROQ_API_KEY", saved[1])):
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+            llm._call_groq = saved[2]
+            llm._cooldown.clear()
     finally:
         trainer.run_live = real
         prof.USERS_DIR = old

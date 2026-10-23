@@ -159,9 +159,19 @@ python bootstrap.py --ui      # or launch.bat
    `tools/fitting/calibrate_thresholds.py`, `tools/evaluation/library_eval.py`, `tools/evaluation/external_check.py`,
    `tools/evaluation/pose_check.py` (every pose end to end, no camera).
 
-Checks: `python bootstrap.py --flow` (250 offline checks for routines, profile
+Checks: `python bootstrap.py --flow` (257 offline checks for routines, profile
 rules, the launcher screens, the drawing helpers, the HUD layout, the demo clips and
-the camera-window controls).
+the camera-window controls). `python bootstrap.py --clicks` is the click-through test: it
+presses every button, tab, switch and drop-down on every launcher screen (347 checks) and
+fails if any of them raises or lands on the wrong screen.
+
+**Moving around.** Every screen except the first has a **Home** button at the top right
+(also in the sidebar, and on the app name) that goes back to the profile screen. **Back**
+names the screen it returns to (*Profile*, *Routines*, *Plan*, *Pose library*) and returns to
+the screen you came from: the pose library goes back to wherever you opened it, and a plan
+built from library ticks goes back to the library with the ticks kept. Pressing Home, a sidebar
+button or a step name half-way through a routine shows the session summary first, so
+the results so far are never lost; press Home again to leave.
 
 ### Choosing a pose, the voice, and the demo video
 
@@ -185,6 +195,32 @@ the camera-window controls).
   pose start where they end, so they only breathe; Cat-Cow moves between its two real shapes.
   The starting positions are generic illustration, and a single stick figure cannot show a
   spine's curve, so Cat-Cow shows the head and pelvis moving rather than the arch.
+
+### Optional: coach notes written by a language model (Groq)
+
+The app works fully without this. With a free Groq key, two pieces of text are reworded by
+`openai/gpt-oss-20b`: the explanation under **Ask the coach** and the **coach's note** on the
+session summary. Nothing else changes: the routine is still chosen by `yoga/nlp.py`, poses are
+still scored from joint angles, and the plain template text is shown first and stays if the model
+is slow, offline, rate-limited or rejected.
+
+* **Set up** (about a minute, free, no card): create a key at <https://console.groq.com/keys>,
+  copy `.env.example` to `.env`, and paste the key after `GROQ_API_KEY=`. `.env` is git-ignored.
+  There is no local model to install.
+* **What the model may say** is limited by `yoga/llm.py`. It gets facts the code already decided
+  and a reply is dropped if it names a pose outside the routine, quotes a number that is not in the
+  facts, mentions a dose, tells the user to stop a medicine, promises a cure, claims a routine
+  treats a condition, or names a head-below-heart or belly-down pose that the user's profile rules
+  out.
+* **What leaves the computer**: the sentence typed into the coach box (e-mail addresses, phone
+  numbers and links removed) or the pose names and numbers of a finished session, without the
+  user's name. Never video, frames, landmarks, the user ID or the medication field. Set
+  `YOGA_LLM=off` to keep everything on the machine.
+* **Limits**: Groq's free plan allows about 30 requests a minute and 1,000 a day for this model
+  (check <https://console.groq.com/docs/rate-limits>); a rate-limited call just falls back to the
+  template. Free-tier terms can change.
+* **Check**: `python tests/test_llm.py` (54 offline checks with a fake model); add `--live` to make
+  two real calls.
 
 ### The look
 
@@ -383,7 +419,7 @@ tools/             run once / occasionally, grouped by purpose
   evaluation/      library_eval  external_check  pose_check  deviation_study  confusion
                    validate_dataset  make_validation (regenerates docs/reports/VALIDATION.md)
   session/         analyse  simulate_session  demo_frames  report  ui_screenshots (regenerates docs/images)
-tests/             selftest  test_flow  test_nlp  test_collection  test_landmark_export   (offline, no camera)
+tests/             selftest  test_flow  test_clickthrough  test_nlp  test_collection  test_landmark_export  test_llm   (offline, no camera)
 
 data/              asana_fits.json (the fitted library)   demo_poses.json (shapes for the demo videos)
                    results/ (evaluation outputs)
@@ -420,7 +456,8 @@ vitals, packaging.
 Wellness and education, **not a medical device**. The alignment score is a
 geometric agreement measure against a fitted reference, not a clinical or
 certified assessment, and it does not replace a teacher. The camera window is
-visible the whole time and no frame is saved unless you press `s`.
+visible the whole time and no frame is saved unless you press `s`. Video never leaves the
+computer; only if a Groq key is set, short text for the coach notes does (see above).
 
 ## Licence
 

@@ -1,6 +1,9 @@
 # environments and build output
 .venv/
 venv/
+
+# API keys - never commit (copy .env.example to .env)
+.env
 __pycache__/
 *.pyc
 *.egg-info/

@@ -22,6 +22,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 import tkinter as tk
 
@@ -31,6 +32,7 @@ sys.path.insert(0, HERE)
 from yoga import profile as prof                                  # noqa: E402
 from yoga import routines as rt                                   # noqa: E402
 from yoga import demo as demo_lib                                 # noqa: E402
+from yoga import llm                                              # noqa: E402
 from yoga import ui                                               # noqa: E402
 from yoga.theme import TOKENS as T                                # noqa: E402
 
@@ -79,6 +81,12 @@ class App(tk.Tk):
         self.pos = 0
         self.guest = False                   #: practising without a saved profile
         self._anim = None                    #: the demo-video animation timer
+        self._here = None                    #: (screen, label) of the last step screen shown
+        self._at_start = False               #: the profile screen is showing
+        self._practising = False             #: a pose screen of a routine is showing
+        self._lib_back = None                #: where the pose library's Back button goes
+        self._plan_from = None               #: where the plan's Back button goes
+        self._practice_back = None           #: where the first pose's Back button goes
         try:
             with open(os.path.join(GALLERY, "credits.json"), encoding="utf-8") as fh:
                 self.credits = json.load(fh)
@@ -118,7 +126,9 @@ class App(tk.Tk):
         s = self.side
         inner = tk.Frame(s, bg=T["card"])
         inner.pack(fill="both", expand=True, padx=ui.px(24), pady=ui.px(30))
-        ui.label(inner, "AI Yoga\nPosture Companion", "brand", bg="card").pack(anchor="w")
+        brand = ui.label(inner, "AI Yoga\nPosture Companion", "brand", bg="card")
+        brand.pack(anchor="w")
+        ui.make_clickable(brand, self.go_home)
         ui.Hairline(inner, 40, 2).pack(anchor="w", pady=(ui.px(10), ui.px(8)))
         ui.label(inner, "Pose correction from one webcam. Runs on this computer.", "mono",
                  bg="card", fit=True).pack(fill="x")
@@ -143,17 +153,22 @@ class App(tk.Tk):
         self.status.pack(fill="x")
 
         tk.Frame(inner, bg=T["card"]).pack(fill="both", expand=True)       # spacer
+        ui.button(inner, "Home", self.go_home, "side").pack(fill="x", pady=(0, ui.px(6)))
         self.voice_btn = ui.button(inner, "Voice: ON", self.toggle_voice, "side")
         self.voice_btn.pack(fill="x", pady=(0, ui.px(6)))
-        ui.button(inner, "Camera: choose a pose", self.free_practice, "side").pack(fill="x")
-        ui.button(inner, "Pose library", self.show_gallery, "side").pack(fill="x", pady=(ui.px(6), 0))
+        ui.button(inner, "Camera: choose a pose", lambda: self._leave(self.free_practice),
+                  "side").pack(fill="x")
+        ui.button(inner, "Pose library", lambda: self._leave(self.open_library),
+                  "side").pack(fill="x", pady=(ui.px(6), 0))
         ui.button(inner, "Contribute samples", self.open_collect, "side").pack(
             fill="x", pady=(ui.px(6), ui.px(14)))
         ui.label(inner, "Your data never leaves this computer.\nGeneral wellness guidance,\nnot medical advice.",
                  "small", bg="card", justify="left").pack(anchor="w")
 
     def _nav(self, step: int) -> None:
-        for i, (_row, dot, txt) in enumerate(self.nav_rows):
+        reach = (True, self.profile is not None, self.plan is not None, False)
+        for i, (row, dot, txt) in enumerate(self.nav_rows):
+            row.configure(cursor="hand2" if reach[i] else "arrow")
             dot.delete("all")
             r = ui.px(7)
             c = ui.px(8)
@@ -183,14 +198,41 @@ class App(tk.Tk):
 
     def _nav_go(self, i: int) -> None:
         if i == 0:
-            self.show_profile()
+            self.go_home()
         elif i == 1 and self.profile:
-            self.show_routines()
+            self._leave(self.show_routines)
         elif i == 2 and self.plan:
-            self.show_plan()
+            self._leave(self.show_plan)
+
+    def go_home(self) -> None:
+        """Back to the start (the profile screen), from anywhere."""
+        if self._at_start and not self._practising:
+            return                                  # already there: keep what was typed
+        self._leave(self.show_profile)
+
+    def _has_progress(self) -> bool:
+        """True once the current routine has a real result (a hold, a skip, a stop)."""
+        return any(not str(r.get("result", "")).startswith("skipped for your profile")
+                   for r in self.results)
+
+    def _leave(self, go) -> None:
+        """Run the navigation ``go``.  Halfway through a routine, keep what was done instead:
+        show the summary first, so one stray click on Home never throws a session away."""
+        if self._practising and self._has_progress():
+            self.show_summary()
+            self.flash("Routine stopped - your results so far are below. "
+                       "Press Home again to go to the start.", "warn")
+            return
+        go()
+
+    def open_library(self) -> None:
+        """The pose library, remembering which screen its Back button returns to."""
+        here = self._here
+        self._lib_back = here if here else (self.show_profile, "Profile")
+        self.show_gallery()
 
     # ----------------------------------------------------------- screen plumbing
-    def _screen(self, step: int, title: str, sub: str = "") -> tk.Frame:
+    def _screen(self, step: int, title: str, sub: str = "", home: bool = True) -> tk.Frame:
         if self._after:
             self.after_cancel(self._after)
             self._after = None
@@ -203,7 +245,14 @@ class App(tk.Tk):
             ui.clear(box)
         self.foot_bar = tk.Frame(self.foot, bg=T["bg"])
         self.foot_bar.pack(fill="x", padx=ui.px(36), pady=ui.px(14))
-        ui.label(self.head, title, "h1", fit=True).pack(fill="x")
+        self._practising = False
+        self._at_start = not home
+        top = tk.Frame(self.head, bg=T["bg"])
+        top.pack(fill="x")
+        if home:
+            ui.button(top, "Home", self.go_home, "ghost").pack(side="right", anchor="n",
+                                                               padx=(ui.px(12), 0))
+        ui.label(top, title, "h1", fit=True).pack(side="left", fill="x", expand=True)
         ui.Hairline(self.head).pack(anchor="w", pady=(ui.px(10), ui.px(8)))
         if sub:
             ui.label(self.head, sub, "mono", fit=True).pack(fill="x")
@@ -300,9 +349,10 @@ class App(tk.Tk):
 
     # ------------------------------------------------------ 1. the profile
     def show_profile(self) -> None:
+        self._here = (self.show_profile, "Profile")
         b = self._screen(0, "Tell us about you",
                          "Used only on this computer. It decides which poses are "
-                         "right for you and how long to hold them.")
+                         "right for you and how long to hold them.", home=False)
         self.v = {k: tk.StringVar() for k in
                   ("name", "age", "weight", "height", "bust", "waist", "hip", "location",
                    "medication")}
@@ -450,6 +500,9 @@ class App(tk.Tk):
 
     # ----------------------------------------------------- 2. the routine
     def show_routines(self) -> None:
+        if self.profile is None:                      # nothing to base a routine on yet
+            return self.show_profile()
+        self._here = (self.show_routines, "Routines")
         p = self.profile
         rec = rt.recommend(p.job)
         b = self._screen(1, f"Hello {p.name} — what do you need today?",
@@ -458,8 +511,6 @@ class App(tk.Tk):
                          + (f"  |  {p.location}" if p.location else ""))
         self.choice = tk.StringVar(value=self._choice_val or rec)
         self.choice.trace_add("write", lambda *_: setattr(self, "_choice_val", self.choice.get()))
-        routines = rt.all_routines()
-
         # ---- ask the coach, in your own words
         box = ui.Card(b, "card")
         box.pack(fill="x", pady=(ui.px(8), ui.px(20)))
@@ -472,6 +523,9 @@ class App(tk.Tk):
         ui.button(row, "Ask", self._ask, "primary").pack(side="left", padx=(ui.px(10), 0))
         ui.label(box.body, 'Try:  "my lower back hurts and I only have 10 minutes"', "small",
                  bg="card").pack(anchor="w")
+        if llm.enabled():
+            ui.label(box.body, llm.describe(), "small", bg="card", fit=True).pack(
+                fill="x", pady=(ui.px(2), 0))
         self.ask_out = ui.frame(box.body, "card")
         self.ask_out.pack(fill="x")
         self.ask_entry.bind("<Return>", lambda _e: (self._ask(), "break")[1])
@@ -490,13 +544,13 @@ class App(tk.Tk):
             self.rt_lists[key] = lst
             for r in items:
                 self._routine_card(lst, r, rec)
-        ui.button(b, "Pick my own poses from the library  →", self.show_gallery, "ghost").pack(
+        ui.button(b, "Pick my own poses from the library  →", self.open_library, "ghost").pack(
             anchor="w", pady=(ui.px(6), 0))
         start = next((k for k, items in groups.items()
                       if any(r.key == self.choice.get() for r in items)), "lifestyle")
         self.rt_tabs.select(start)
 
-        self.back_btn(self.show_profile)
+        self.back_btn(self.show_profile, "←  Profile")
         self.next_btn("See my plan  →", self._pick_routine)
         self.bind("<Return>", lambda _e: self._pick_routine())
 
@@ -557,9 +611,72 @@ class App(tk.Tk):
             ui.label(self.ask_out, c, "warn", bg="card", fit=True).pack(
                 fill="x", pady=(ui.px(4), 0))
 
+        # An optional friendlier note from the language model.  The template text above is
+        # already on screen; this only ever adds to it, and only if the reply passes the checks.
+        self._ask_seq = getattr(self, "_ask_seq", 0) + 1
+        seq = self._ask_seq
+        if llm.enabled() and u.best in routines:
+            slot = ui.label(self.ask_out, "The coach is writing a short note...", "small",
+                            bg="card", fit=True)
+            slot.pack(fill="x", pady=(ui.px(10), 0))
+            routine = routines[u.best]
+            names = (self.profile.name,)
+
+            def finish(rep) -> None:
+                if seq != self._ask_seq or not slot.winfo_exists():
+                    return                                  # a newer question, or the screen changed
+                if rep is None:
+                    slot.destroy()
+                else:
+                    slot.config(text=f"{rep.text}\n(written by {rep.model}, checked for safety)")
+
+            self._bg(lambda: llm.explain_recommendation(
+                text, routine, u.minutes, u.cautions, u.flags, names), finish)
+
+    def _bg(self, work, done) -> None:
+        """Run ``work()`` off the UI thread; call ``done(result)`` back on it.
+
+        A failed ``work`` gives ``done(None)``.  ``done`` is skipped if the window is gone.
+        """
+        box: dict = {}
+
+        def run() -> None:
+            try:
+                box["v"] = work()
+            except Exception:
+                box["v"] = None
+            box["done"] = True
+
+        def poll() -> None:
+            try:
+                if not box.get("done"):
+                    self.after(120, poll)
+                    return
+                done(box.get("v"))
+            except tk.TclError:                              # window closed while waiting
+                pass
+
+        threading.Thread(target=run, daemon=True).start()
+        self.after(120, poll)
+
+    def _llm_flags(self) -> set:
+        """Safety flags for the checker, from the profile and the plan (never sent anywhere)."""
+        flags: set = set()
+        p = self.profile
+        if p.bp == "High" or p.age >= 60 or any(i.skipped for i in self.plan.items):
+            flags.add("avoid_inversion")
+        if p.medication.strip():
+            try:
+                from yoga import nlp
+                flags |= set(nlp.safety_flags(p.medication))
+            except Exception:
+                pass
+        return flags
+
     def _pick_routine(self) -> None:
         routine = rt.all_routines()[self.choice.get()]
         self.plan = prof.personalise(self.profile, routine)
+        self._plan_from = (self.show_routines, "Routines")
         self.show_plan()
 
     # --------------------------------------------------- 2b. the pose library
@@ -673,7 +790,9 @@ class App(tk.Tk):
             except Exception as exc:
                 tv.insert("", "end", text=f"  hierarchy unavailable ({type(exc).__name__})")
 
-        self.back_btn(self.show_routines if self.profile else self.show_profile)
+        back = self._lib_back or ((self.show_routines, "Routines") if self.profile
+                                  else (self.show_profile, "Profile"))
+        self.back_btn(back[0], f"←  {back[1]}")
         ui.button(self.foot_bar, "Clear", self._clear_picks, "ghost").pack(side="left", padx=ui.px(10))
         self.count_lbl.pack(side="left", padx=ui.px(10))
         self.next_btn("Build my routine  →", self._build_custom)
@@ -706,11 +825,13 @@ class App(tk.Tk):
                              "The poses you picked, in the order you picked them.",
                              tuple(self.picked))
         self.plan = prof.personalise(self.profile, routine)
+        self._plan_from = (self.show_gallery, "Pose library")
         self.show_plan()
 
     # --------------------------------------------------------- 3. the plan
     def show_plan(self) -> None:
         plan = self.plan
+        self._here = (self.show_plan, "Plan")
         b = self._screen(2, plan.routine.title, plan.routine.target)
 
         head = ("#", "pose", "position", "how", "hold")
@@ -771,7 +892,8 @@ class App(tk.Tk):
                 ui.label(card.body, "-  " + ln, "muted", bg="card", fit=True).pack(
                     fill="x", pady=(0, ui.px(5)))
 
-        self.back_btn(self.show_routines)
+        back = self._plan_from or (self.show_routines, "Routines")
+        self.back_btn(back[0], f"←  {back[1]}")
         ui.Toggle(self.foot_bar, "Voice", self.voice).pack(side="left", padx=(ui.px(24), ui.px(18)))
         ui.label(self.foot_bar, "camera", "cap").pack(side="left", padx=(0, ui.px(8)))
         ui.combo(self.foot_bar, self.camera, ("0", "1", "2", "3", "4", "5"), 3).pack(side="left")
@@ -779,7 +901,8 @@ class App(tk.Tk):
         self.bind("<Return>", lambda _e: self.start_practice())
 
     # ------------------------------------------------------- 4. practice
-    def start_practice(self) -> None:
+    def start_practice(self, back=None) -> None:
+        self._practice_back = back or (self.show_plan, "Plan")
         self.queue = list(self.plan.active)
         self.results = [{"pose": rt.POSES[i.pose_key].name, "result": "skipped for your profile"}
                         for i in self.plan.items if i.skipped]
@@ -795,6 +918,7 @@ class App(tk.Tk):
         n = len(self.queue)
         b = self._screen(3, f"Pose {self.pos + 1} of {n}: {pose.name}",
                          f"{pose.sanskrit}  |  {pose.benefit}")
+        self._practising = True
         if error:
             self.flash(error, "bad")
         mode, kind = pose_mode(pose)
@@ -839,7 +963,11 @@ class App(tk.Tk):
                         ("camera", self.camera.get() if pose.is_scored else "-", ""))).pack(
             fill="x", pady=(ui.px(22), 0))
 
-        ui.button(self.foot_bar, "Stop routine", self.show_summary).pack(side="left")
+        if self.pos == 0 and not self._has_progress():          # nothing done yet: just go back
+            back = self._practice_back or (self.show_plan, "Plan")
+            self.back_btn(back[0], f"←  {back[1]}")
+        else:
+            ui.button(self.foot_bar, "Stop routine", self.show_summary).pack(side="left")
         ui.button(self.foot_bar, "Skip this pose", lambda: self._done(pose, "skipped"),
                   "ghost").pack(side="left", padx=ui.px(10))
         self._go = self.next_btn("I'm ready — start  →", lambda: self._begin(pose, item))
@@ -987,7 +1115,7 @@ class App(tk.Tk):
             return
         if not free:
             self.plan = plan
-            return self.start_practice()
+            return self.start_practice((self.show_gallery, "Pose library"))
         self._nav(3)
         args = self._launch(key, plan.active[0].hold_s, routine=False)
         if args is None:
@@ -1005,6 +1133,7 @@ class App(tk.Tk):
 
     def _run_guided(self, pose: rt.Pose, item: prof.PlanItem) -> None:
         b = self._screen(3, pose.name, f"{pose.sanskrit}  |  guided, not scored")
+        self._practising = True
         self.remaining = item.hold_s
         cols = ui.frame(b)
         cols.pack(fill="x", pady=(ui.px(8), 0))
@@ -1060,6 +1189,7 @@ class App(tk.Tk):
     # --------------------------------------------------------- summary
     def show_summary(self) -> None:
         b = self._screen(3, "Session summary", f"{self.plan.routine.title}")
+        self._here = (self.show_routines, "Routines")
         if not self._saved_path and not self.guest:    # one history entry per session, however it ended
             try:
                 self._saved_path = prof.append_history(self.profile, self.results)
@@ -1082,8 +1212,21 @@ class App(tk.Tk):
         if note:
             card = ui.Card(b, "card")
             card.pack(fill="x", pady=(0, ui.px(20)))
-            ui.label(card.body, "coach's note", "cap", bg="card").pack(anchor="w", pady=(0, ui.px(6)))
-            ui.label(card.body, note, "body", bg="card", fit=True).pack(fill="x")
+            cap = ui.label(card.body, "coach's note", "cap", bg="card")
+            cap.pack(anchor="w", pady=(0, ui.px(6)))
+            note_lbl = ui.label(card.body, note, "body", bg="card", fit=True)
+            note_lbl.pack(fill="x")
+
+            if llm.enabled() and self.results:
+                rows = [dict(r) for r in self.results]
+                names, flags = (self.profile.name,), self._llm_flags()
+
+                def finish(rep) -> None:                    # keep the template note if it fails
+                    if rep is not None and note_lbl.winfo_exists():
+                        note_lbl.config(text=rep.text)
+                        cap.config(text=f"coach's note (written by {rep.model}, checked)")
+
+                self._bg(lambda: llm.session_note(rows, names, flags), finish)
 
         table = ui.frame(b)
         table.pack(fill="x")

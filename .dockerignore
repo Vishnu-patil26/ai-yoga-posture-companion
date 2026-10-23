@@ -10,3 +10,4 @@ data/demo
 data/samples/*.mp4
 models
 profiles/*.json
+.env
